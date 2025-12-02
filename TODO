@@ -1,0 +1,28 @@
+Lexing:
+[*] Integers
+[*] Operators (+, -, *, /)
+[*] Parentheses
+[*] Int keyword
+[*] Identifiers
+[*] Semicolons
+[*] Float keyword
+[ ] Assignment operator (=)
+
+Parsing:
+[*] Addition
+[*] Subtraction
+[*] Multiplication
+[*] Division
+[*] Parentheses handling
+[*] Operator precedence
+[*] Variable declaration (no assignment)
+[*] Blocks
+[*] Primitive types (int, float)
+[ ] Variable declaration with assignment
+[ ] Variable assignment
+[ ] Pointer types
+[ ] Variables as expressions
+
+Refactor:
+[ ] Split up into modules
+[ ] Extract common code in parser into functions
