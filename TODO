@@ -6,7 +6,7 @@ Lexing:
 [*] Identifiers
 [*] Semicolons
 [*] Float keyword
-[ ] Assignment operator (=)
+[*] Assignment operator (=)
 
 Parsing:
 [*] Addition
@@ -18,11 +18,19 @@ Parsing:
 [*] Variable declaration (no assignment)
 [*] Blocks
 [*] Primitive types (int, float)
-[ ] Variable declaration with assignment
-[ ] Variable assignment
+[*] Variable declaration with assignment
+[*] Variable assignment
+[*] Variables as expressions
+[ ] Function declaration
+[ ] Return statement
+[ ] Function call
 [ ] Pointer types
-[ ] Variables as expressions
 
 Refactor:
-[ ] Split up into modules
-[ ] Extract common code in parser into functions
+[*] Split up into modules
+[*] Extract common code in parser into functions
+
+Analysis:
+[*] Declarations
+[ ] Type checking
+[ ] Return checking
