@@ -1,7 +1,10 @@
 #include "scc.h"
 
 int main(void) {
-    char *code = read_file("test.c");
+    char *in_path = "test.c";
+    char *out_path = "test.qbe";
+
+    char *code = read_file(in_path);
     sv_t code_view = sv_from_cstr(code);
 
     list_t tokens = { .element_size = sizeof(token_t) };
@@ -24,7 +27,7 @@ int main(void) {
     // node_print(root_ref);
     // printf("\n");
 
-    if (!analyze(root_ref)) {
+    if (!analyze(root_ref, out_path)) {
         todo("Handle analysis error");
     }
 

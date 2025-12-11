@@ -34,3 +34,6 @@ Analysis:
 [*] Declarations
 [ ] Type checking
 [ ] Return checking
+
+Codegen:
+[ ] Functions

@@ -7,4 +7,4 @@ typedef struct {
 	node_ref_t type_ref;
 } symbol_t;
 
-bool analyze(node_ref_t root_ref);
+bool analyze(node_ref_t root_ref, const char *out_path);
