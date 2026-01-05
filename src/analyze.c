@@ -3,6 +3,9 @@
 static node_t int_type = {
 	.type = NODE_INT,
 };
+static node_t void_type = {
+	.type = NODE_VOID,
+};
 
 typedef enum {
 	QBE_VAR_IDENTIFIER,
@@ -158,6 +161,11 @@ static void add_symbol(list_t *symbol_maps, symbol_t symbol) {
 
 bool is_global_map(list_t *symbol_maps) {
 	return symbol_maps->length == 1;
+}
+
+static bool type_eq(node_t *a, node_t *b) {
+	// TODO: This only works for primitives
+	return a->type == b->type;
 }
 
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref) {
@@ -324,24 +332,32 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref) 
 			}
 			fprintf(ctx->out_file, "}\n");
 		} break;
-		case NODE_RETURN:
-			// TODO: Early return for void functions
+		case NODE_RETURN: {
+			node_t *function_return_type = node_ref_get(ctx->function_return_type_ref);
 
-			// LEFTOFF: This doesn't work, if we need to cast we need a temporary
+			node_t *expr_type = &void_type;
+			if (!node_ref_is_null(node->as.ret.expr_ref)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.ret.expr_ref)) {
+					return false;
+				}
+				expr_type = ctx->result_type;
+			}
 
-			// node_t *function_return_type = node_ref_get(ctx->function_return_type_ref);
+			// TODO: Implicit casting should be handled somewhere, probably not here though
+			if (!type_eq(function_return_type, expr_type)) {
+				todo("Report return type mismatch error");
+			}
 
-			// if (!analyze_node(ctx, symbol_maps, node->as.ret.expr_ref)) {
-			// 	return false;
-			// }
-			// fprintf(ctx->out_file, "    ret ");
-			// // Check if we need to cast
-			// if (qbe_type_from_node(ctx->result_type) != qbe_type_from_node(function_return_type)) {
-			// 	fprintf(ctx->out_file, "cast ");
-			// }
-			// qbe_write_var(ctx, ctx->result_var);
-			// fprintf(ctx->out_file, "\n");
-			return true;
+			// Early return for void functions
+			if (expr_type->type == NODE_VOID) {
+				fprintf(ctx->out_file, "    ret\n");
+				return true;
+			}
+
+			fprintf(ctx->out_file, "    ret ");
+			qbe_write_var(ctx, ctx->result_var);
+			fprintf(ctx->out_file, "\n");
+		} break;
 		default:
 			unreachable();
 	}

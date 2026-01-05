@@ -7,6 +7,8 @@ Lexing:
 [*] Semicolons
 [*] Float keyword
 [*] Assignment operator (=)
+[*] Return keyword
+[*] Braces ({, })
 
 Parsing:
 [*] Addition
@@ -21,8 +23,9 @@ Parsing:
 [*] Variable declaration with assignment
 [*] Variable assignment
 [*] Variables as expressions
-[ ] Function declaration
-[ ] Return statement
+[-] Function declaration
+[*] Return statement
+[ ] Casting
 [ ] Function call
 [ ] Pointer types
 
@@ -32,8 +35,8 @@ Refactor:
 
 Analysis:
 [*] Declarations
-[ ] Type checking
-[ ] Return checking
+[-] Type checking
+[-] Return checking
 
 Codegen:
-[ ] Functions
+[*] Functions

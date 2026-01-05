@@ -17,7 +17,8 @@ test: scc $(QBE) test.c
 	./scc
 	$(QBE) -o test.s test.qbe
 	$(CC) test.s -o test.out
-	./test.out
+	@echo ./test.out
+	@echo Test program exited with code: $$(./test.out; echo $$?)
 
 $(QBE):
 	make -C qbe

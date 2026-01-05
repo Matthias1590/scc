@@ -3,5 +3,5 @@ int main() {
     float y;
     x = 5;
     y = 6 + 2 * x;
-    return y;
+    return (int)y;
 }

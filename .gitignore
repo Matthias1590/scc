@@ -1,2 +1,6 @@
+.vscode/
 bin/
 scc
+test.out
+test.qbe
+test.s
