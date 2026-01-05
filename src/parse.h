@@ -18,6 +18,7 @@ typedef enum {
     NODE_RETURN,
     NODE_FUNCTION,
     NODE_FUNCTION_SIGNATURE,
+    NODE_CAST,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -51,6 +52,10 @@ struct node_t {
         struct {
             node_ref_t expr_ref;
         } ret;
+        struct {
+            node_ref_t expr_ref;
+            node_ref_t target_type_ref;
+        } cast;
         token_t identifier;
         list_t block;
     } as;

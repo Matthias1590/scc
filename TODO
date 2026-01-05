@@ -25,7 +25,7 @@ Parsing:
 [*] Variables as expressions
 [-] Function declaration
 [*] Return statement
-[ ] Casting
+[*] Casting
 [ ] Function call
 [ ] Pointer types
 

@@ -123,6 +123,36 @@ static bool try_consume_token(parse_ctx_t *ctx, token_type_t expected_type, toke
     return true;
 }
 
+static bool try_consume_type(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (new_ctx.token_view->length == 0) {
+        return false;
+    }
+    
+    node_t type_node;
+
+    token_t *token = lv_at(new_ctx.token_view, token_t, 0);
+    if (token->type == TOKEN_INT) {
+        type_node.type = NODE_INT;
+    } else if (token->type == TOKEN_FLOAT) {
+        type_node.type = NODE_FLOAT;
+    } else if (token->type == TOKEN_VOID) {
+        type_node.type = NODE_VOID;
+    } else {
+        return false;
+    }
+
+    new_ctx.token_view->start++;
+    new_ctx.token_view->length--;
+
+    list_push(new_ctx.nodes, &type_node);
+    *new_ctx.result_index = new_ctx.nodes->length - 1;
+    *ctx = new_ctx;
+
+    return true;
+}
+
 static bool try_consume_lhs(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -158,6 +188,7 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_expr_0(parse_ctx_t *ctx);
+static bool try_consume_expr_2(parse_ctx_t *ctx);
 
 static bool try_consume_parens(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
@@ -176,8 +207,40 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_cast(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_type(&new_ctx)) {
+        return false;
+    }
+    node_ref_t target_type_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_expr_2(&new_ctx)) {
+        return false;
+    }
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    node_t cast_node = {
+        .type = NODE_CAST,
+        .as.cast.target_type_ref = target_type_ref,
+        .as.cast.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &cast_node);
+
+    return true;
+}
+
 static bool try_consume_expr_2(parse_ctx_t *ctx) {
     return try_consume_intlit(ctx)
+        || try_consume_cast(ctx)
         || try_consume_parens(ctx)
         || try_consume_lhs(ctx);
 }
@@ -330,36 +393,6 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
         }
         break;
     }
-
-    return true;
-}
-
-static bool try_consume_type(parse_ctx_t *ctx) {
-    parse_ctx_t new_ctx = *ctx;
-
-    if (new_ctx.token_view->length == 0) {
-        return false;
-    }
-    
-    node_t type_node;
-
-    token_t *token = lv_at(new_ctx.token_view, token_t, 0);
-    if (token->type == TOKEN_INT) {
-        type_node.type = NODE_INT;
-    } else if (token->type == TOKEN_FLOAT) {
-        type_node.type = NODE_FLOAT;
-    } else if (token->type == TOKEN_VOID) {
-        type_node.type = NODE_VOID;
-    } else {
-        return false;
-    }
-
-    new_ctx.token_view->start++;
-    new_ctx.token_view->length--;
-
-    list_push(new_ctx.nodes, &type_node);
-    *new_ctx.result_index = new_ctx.nodes->length - 1;
-    *ctx = new_ctx;
 
     return true;
 }

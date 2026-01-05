@@ -358,6 +358,34 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref) 
 			qbe_write_var(ctx, ctx->result_var);
 			fprintf(ctx->out_file, "\n");
 		} break;
+		case NODE_CAST: {
+			if (!analyze_node(ctx, symbol_maps, node->as.cast.expr_ref)) {
+				return false;
+			}
+			qbe_var_t expr_var = ctx->result_var;
+			node_t *expr_type = ctx->result_type;
+
+			node_t *target_type = node_ref_get(node->as.cast.target_type_ref);
+
+			// TODO: Ensure expr_type can be cast to target_type
+
+			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_node(target_type));
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, qbe_type_from_node(target_type));
+			// If the cast is unnecessary, just copy instead of casting
+			if (qbe_type_from_node(target_type) == qbe_type_from_node(expr_type)) {
+				fprintf(ctx->out_file, "copy ");
+			} else {
+				fprintf(ctx->out_file, "cast ");
+			}
+			qbe_write_var(ctx, expr_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = target_type;
+		} break;
 		default:
 			unreachable();
 	}
