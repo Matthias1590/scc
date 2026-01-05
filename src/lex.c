@@ -49,6 +49,8 @@ static bool try_consume_identifier(list_t *tokens, sv_t *code_view) {
         token.type = TOKEN_FLOAT;
     } else if (strcmp(buffer, "void") == 0) {
         token.type = TOKEN_VOID;
+    } else if (strcmp(buffer, "return") == 0) {
+        token.type = TOKEN_RETURN;
     } else {
         strcpy(token.as.identifier, buffer);
     }

@@ -18,6 +18,7 @@ typedef enum {
     TOKEN_RBRACE,
     TOKEN_EQ,
     TOKEN_VOID,
+    TOKEN_RETURN,
 } token_type_t;
 
 typedef struct {

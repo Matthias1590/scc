@@ -13,8 +13,11 @@ bin/%.o: src/%.c
 	@mkdir -p bin
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: scc $(QBE)
+test: scc $(QBE) test.c
 	./scc
+	$(QBE) -o test.s test.qbe
+	$(CC) test.s -o test.out
+	./test.out
 
 $(QBE):
 	make -C qbe

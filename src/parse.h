@@ -15,6 +15,7 @@ typedef enum {
     NODE_VOID,
     NODE_ASSIGNMENT,
     NODE_IDENTIFIER,
+    NODE_RETURN,
     NODE_FUNCTION,
     NODE_FUNCTION_SIGNATURE,
 } node_type_t;
@@ -47,6 +48,9 @@ struct node_t {
             node_ref_t return_type_ref;
             token_t *name;
         } function_signature;
+        struct {
+            node_ref_t expr_ref;
+        } ret;
         token_t identifier;
         list_t block;
     } as;
