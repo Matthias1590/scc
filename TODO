@@ -9,6 +9,7 @@ Lexing:
 [*] Assignment operator (=)
 [*] Return keyword
 [*] Braces ({, })
+[ ] Strings
 
 Parsing:
 [*] Addition

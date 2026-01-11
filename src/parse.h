@@ -12,13 +12,17 @@ typedef enum {
     NODE_BLOCK,
     NODE_FLOAT,
     NODE_INT,
+    NODE_LONG,
     NODE_VOID,
+    NODE_PTR_TYPE,
     NODE_ASSIGNMENT,
     NODE_IDENTIFIER,
     NODE_RETURN,
     NODE_FUNCTION,
     NODE_FUNCTION_SIGNATURE,
     NODE_CAST,
+    NODE_ADDRESS_OF,
+    NODE_DEREF,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -56,6 +60,15 @@ struct node_t {
             node_ref_t expr_ref;
             node_ref_t target_type_ref;
         } cast;
+        struct {
+            node_ref_t base_type_ref;
+        } ptr_type;
+        struct {
+            node_ref_t expr_ref;
+        } address_of;
+        struct {
+            node_ref_t expr_ref;
+        } deref;
         token_t identifier;
         list_t block;
     } as;

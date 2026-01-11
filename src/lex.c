@@ -83,6 +83,8 @@ static bool try_consume_symbol(list_t *tokens, sv_t *code_view) {
         token.type = TOKEN_RBRACE;
     } else if (code_view->string[0] == '=') {
         token.type = TOKEN_EQ;
+    } else if (code_view->string[0] == '&') {
+        token.type = TOKEN_AMPERSAND;
     } else {
         return false;
     }

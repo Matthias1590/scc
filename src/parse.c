@@ -1,5 +1,7 @@
 #include "scc.h"
 
+#define TRACE(...) printf(__VA_ARGS__)
+
 typedef struct {
     list_t *nodes;
     lv_t *token_view;
@@ -148,8 +150,18 @@ static bool try_consume_type(parse_ctx_t *ctx) {
 
     list_push(new_ctx.nodes, &type_node);
     *new_ctx.result_index = new_ctx.nodes->length - 1;
-    *ctx = new_ctx;
 
+    while (try_consume_token(&new_ctx, TOKEN_STAR, NULL)) {
+        node_t ptr_node = {
+            .type = NODE_PTR_TYPE,
+            .as.ptr_type.base_type_ref = ctx_get_result_ref(&new_ctx),
+        };
+        list_push(new_ctx.nodes, &ptr_node);
+        *new_ctx.result_index = new_ctx.nodes->length - 1;
+    }
+
+    *ctx = new_ctx;
+    TRACE("try_consume_type succeeded\n");
     return true;
 }
 
@@ -167,6 +179,7 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &var_node);
 
+    TRACE("try_consume_lhs succeeded\n");
     return true;
 }
 
@@ -184,6 +197,7 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &node);
 
+    TRACE("try_consume_intlit succeeded\n");
     return true;
 }
 
@@ -204,6 +218,8 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
     }
 
     ctx_update(ctx, &new_ctx, node_ref_get(ctx_get_result_ref(&new_ctx)));
+
+    TRACE("try_consume_parens succeeded\n");
     return true;
 }
 
@@ -235,6 +251,51 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &cast_node);
 
+    TRACE("try_consume_cast succeeded\n");
+    return true;
+}
+
+static bool try_consume_address_of(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_token(&new_ctx, TOKEN_AMPERSAND, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_lhs(&new_ctx)) {
+        return false;
+    }
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    node_t ptr_node = {
+        .type = NODE_ADDRESS_OF,
+        .as.address_of.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &ptr_node);
+
+    TRACE("try_consume_address_of succeeded\n");
+    return true;
+}
+
+static bool try_consume_deref(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_token(&new_ctx, TOKEN_STAR, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_lhs(&new_ctx)) {
+        return false;
+    }
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    node_t deref_node = {
+        .type = NODE_DEREF,
+        .as.deref.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &deref_node);
+
+    TRACE("try_consume_deref succeeded\n");
     return true;
 }
 
@@ -242,7 +303,9 @@ static bool try_consume_expr_2(parse_ctx_t *ctx) {
     return try_consume_intlit(ctx)
         || try_consume_cast(ctx)
         || try_consume_parens(ctx)
-        || try_consume_lhs(ctx);
+        || try_consume_lhs(ctx)
+        || try_consume_address_of(ctx)
+        || try_consume_deref(ctx);
 }
 
 static bool try_consume_mult(parse_ctx_t *ctx) {
@@ -270,6 +333,9 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
         parsed = true;
     }
 
+    if (parsed) {
+        TRACE("try_consume_mult succeeded\n");
+    }
     return parsed;
 }
 
@@ -298,6 +364,9 @@ static bool try_consume_div(parse_ctx_t *ctx) {
         parsed = true;
     }
 
+    if (parsed) {
+        TRACE("try_consume_div succeeded\n");
+    }
     return parsed;
 }
 
@@ -318,6 +387,7 @@ static bool try_consume_expr_1(parse_ctx_t *ctx) {
         break;
     }
 
+    TRACE("try_consume_expr_1 succeeded\n");
     return true;
 }
 
@@ -346,6 +416,9 @@ static bool try_consume_add(parse_ctx_t *ctx) {
         parsed = true;
     }
 
+    if (parsed) {
+        TRACE("try_consume_add succeeded\n");
+    }
     return parsed;
 }
 
@@ -374,6 +447,9 @@ static bool try_consume_sub(parse_ctx_t *ctx) {
         parsed = true;
     }
 
+    if (parsed) {
+        TRACE("try_consume_sub succeeded\n");
+    }
     return parsed;
 }
 
@@ -394,6 +470,7 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
         break;
     }
 
+    TRACE("try_consume_expr_0 succeeded\n");
     return true;
 }
 

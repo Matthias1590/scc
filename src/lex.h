@@ -17,6 +17,7 @@ typedef enum {
     TOKEN_LBRACE,
     TOKEN_RBRACE,
     TOKEN_EQ,
+    TOKEN_AMPERSAND,
     TOKEN_VOID,
     TOKEN_RETURN,
 } token_type_t;

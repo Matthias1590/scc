@@ -1,7 +1,5 @@
 int main() {
     int x = 3;
-    float y;
-    x = 5;
-    y = 6 + 2 * x;
-    return (int)y;
+    int *y = &x;
+    return *y;
 }
