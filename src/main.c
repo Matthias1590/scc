@@ -8,7 +8,7 @@ int main(void) {
     sv_t code_view = sv_from_cstr(code);
 
     list_t tokens = { .element_size = sizeof(token_t) };
-    if (!tokenize(&tokens, code_view)) {
+    if (!tokenize(&tokens, code_view, in_path)) {
         todo("Handle tokenization error");
     }
 

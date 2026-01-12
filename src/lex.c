@@ -1,43 +1,66 @@
 #include "scc.h"
 
-static bool try_consume_intlit(list_t *tokens, sv_t *code_view) {
+typedef struct {
+    list_t *tokens;
+    sv_t *code_view;
+    const char *code;
+    const char *file_name;
+} lex_ctx_t;
+
+source_loc_t ctx_get_source_loc(const lex_ctx_t *ctx) {
+    size_t line = 1;
+    size_t column = 1;
+    const char *p = ctx->code;
+    while (p < ctx->code_view->string) {
+        if (*p == '\n') {
+            line++;
+            column = 1;
+        } else {
+            column++;
+        }
+        p++;
+    }
+    return (source_loc_t){ .file_name = ctx->file_name, .line = line, .column = column };
+}
+
+static bool try_consume_intlit(lex_ctx_t *ctx) {
     size_t i = 0;
-    while (i < code_view->length && isdigit(code_view->string[i])) {
+    while (i < ctx->code_view->length && isdigit(ctx->code_view->string[i])) {
         i++;
     }
     if (i == 0) {
         return false;
     }
 
-    sv_t intlit_sv = sv_consume(code_view, i);
+    sv_t intlit_sv = sv_consume(ctx->code_view, i);
 
     char buffer[32];
     if (intlit_sv.length >= sizeof(buffer)) {
-        todo("Report error for integer literal too long");
+        report_error(ctx_get_source_loc(ctx), "Integer literal too long");
     }
 
     sv_to_cstr(intlit_sv, buffer, sizeof(buffer));
 
     token_t token = { .type = TOKEN_INTLIT, .as.intlit = atoi(buffer) };
-    list_push(tokens, &token);
+    list_push(ctx->tokens, &token);
 
     return true;
 }
 
-static bool try_consume_identifier(list_t *tokens, sv_t *code_view) {
+static bool try_consume_identifier(lex_ctx_t *ctx) {
     size_t i = 0;
-    while (i < code_view->length && isalpha(code_view->string[i])) {
+    while (i < ctx->code_view->length && isalpha(ctx->code_view->string[i])) {
         i++;
     }
     if (i == 0) {
         return false;
     }
 
-    sv_t identifier_sv = sv_consume(code_view, i);
+    sv_t identifier_sv = sv_consume(ctx->code_view, i);
 
     char buffer[32];
     if (identifier_sv.length >= sizeof(buffer)) {
-        todo("Make this dynamic");
+        report_error(ctx_get_source_loc(ctx), "Identifier too long");  // TODO: Shouldn't be an error
     }
 
     sv_to_cstr(identifier_sv, buffer, sizeof(buffer));
@@ -57,64 +80,72 @@ static bool try_consume_identifier(list_t *tokens, sv_t *code_view) {
         strcpy(token.as.identifier, buffer);
     }
 
-    list_push(tokens, &token);
+    list_push(ctx->tokens, &token);
 
     return true;
 }
 
-static bool try_consume_symbol(list_t *tokens, sv_t *code_view) {
+static bool try_consume_symbol(lex_ctx_t *ctx) {
     token_t token;
 
-    if (code_view->string[0] == '+') {
+    if (ctx->code_view->string[0] == '+') {
         token.type = TOKEN_PLUS;
-    } else if (code_view->string[0] == '-') {
+    } else if (ctx->code_view->string[0] == '-') {
         token.type = TOKEN_MINUS;
-    } else if (code_view->string[0] == '*') {
+    } else if (ctx->code_view->string[0] == '*') {
         token.type = TOKEN_STAR;
-    } else if (code_view->string[0] == '/') {
+    } else if (ctx->code_view->string[0] == '/') {
         token.type = TOKEN_SLASH;
-    } else if (code_view->string[0] == '(') {
+    } else if (ctx->code_view->string[0] == '(') {
         token.type = TOKEN_LPAREN;
-    } else if (code_view->string[0] == ')') {
+    } else if (ctx->code_view->string[0] == ')') {
         token.type = TOKEN_RPAREN;
-    } else if (code_view->string[0] == ';') {
+    } else if (ctx->code_view->string[0] == ';') {
         token.type = TOKEN_SEMICOLON;
-    } else if (code_view->string[0] == '{') {
+    } else if (ctx->code_view->string[0] == '{') {
         token.type = TOKEN_LBRACE;
-    } else if (code_view->string[0] == '}') {
+    } else if (ctx->code_view->string[0] == '}') {
         token.type = TOKEN_RBRACE;
-    } else if (code_view->string[0] == '=') {
+    } else if (ctx->code_view->string[0] == '=') {
         token.type = TOKEN_EQ;
-    } else if (code_view->string[0] == '&') {
+    } else if (ctx->code_view->string[0] == '&') {
         token.type = TOKEN_AMPERSAND;
-    } else if (code_view->string[0] == ',') {
+    } else if (ctx->code_view->string[0] == ',') {
         token.type = TOKEN_COMMA;
     } else {
         return false;
     }
 
-    sv_consume(code_view, 1);
-    list_push(tokens, &token);
+    sv_consume(ctx->code_view, 1);
+    list_push(ctx->tokens, &token);
     return true;
 }
 
-bool tokenize(list_t *tokens, sv_t code_view) {
+bool tokenize(list_t *tokens, sv_t code_view, const char *file_name) {
+    lex_ctx_t ctx = {
+        .tokens = tokens,
+        .code_view = &code_view,
+        .code = code_view.string,
+        .file_name = file_name,
+    };
+
     while (true) {
         code_view = sv_trim_left(code_view);
+        ctx.code_view = &code_view;
 
         if (code_view.length == 0) {
             return true;
         }
 
-        if (try_consume_intlit(tokens, &code_view)) {
+        if (try_consume_intlit(&ctx)) {
             continue;
-        } else if (try_consume_symbol(tokens, &code_view)) {
+        } else if (try_consume_symbol(&ctx)) {
             continue;
-        } else if (try_consume_identifier(tokens, &code_view)) {
+        } else if (try_consume_identifier(&ctx)) {
             continue;
         }
 
-        todo("Report error for unknown token");
+        report_error(ctx_get_source_loc(&ctx), "Unexpected character: '%c'", code_view.string[0]);
     }
 }
 

@@ -28,4 +28,11 @@
         abort(); \
     } while (0)
 
+#define report_error(source_loc, msg, ...) \
+    do { \
+        fprintf(stderr, "%s:%zu:%zu: " msg "\n", \
+                source_loc.file_name, source_loc.line, source_loc.column, ##__VA_ARGS__); \
+        abort(); \
+    } while (0)
+
 char *read_file(const char *path);

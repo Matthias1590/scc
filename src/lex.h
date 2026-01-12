@@ -25,6 +25,13 @@ typedef enum {
 } token_type_t;
 
 typedef struct {
+    const char *file_name;
+    size_t line;
+    size_t column;
+} source_loc_t;
+
+typedef struct {
+    source_loc_t source_loc;
     token_type_t type;
     union {
         int intlit;
@@ -32,5 +39,5 @@ typedef struct {
     } as;
 } token_t;
 
-bool tokenize(list_t *tokens, sv_t code_view);
+bool tokenize(list_t *tokens, sv_t code_view, const char *file_name);
 void token_print(const token_t *token);
