@@ -139,6 +139,8 @@ static bool try_consume_type(parse_ctx_t *ctx) {
         type_node.type = NODE_FLOAT;
     } else if (token->type == TOKEN_VOID) {
         type_node.type = NODE_VOID;
+    } else if (token->type == TOKEN_CHAR) {
+        type_node.type = NODE_CHAR;
     } else {
         return false;
     }
@@ -606,6 +608,30 @@ static bool try_consume_block(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_param(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_type(&new_ctx)) {
+        return false;
+    }
+    node_ref_t type_ref = ctx_get_result_ref(&new_ctx);
+
+    token_t *identifier_token;
+    if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &identifier_token)) {
+        return false;
+    }
+
+    node_t param_node = {
+        .type = NODE_VAR_DECL,
+        .as.var_decl.type_ref = type_ref,
+        .as.var_decl.name = identifier_token,
+    };
+    ctx_update(ctx, &new_ctx, &param_node);
+
+    trace("try_consume_param succeeded\n");
+    return true;
+}
+
 bool try_consume_function_signature(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -618,22 +644,39 @@ bool try_consume_function_signature(parse_ctx_t *ctx) {
     if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &identifier_token)) {
         return false;
     }
-
-    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
-        return false;
-    }
-    // TODO: Parse parameters
-    if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
-        return false;
-    }
-
+    
     node_t func_sig_node = {
         .type = NODE_FUNCTION_SIGNATURE,
         .as.function_signature.return_type_ref = return_type_ref,
         .as.function_signature.name = identifier_token,
     };
-    ctx_update(ctx, &new_ctx, &func_sig_node);
 
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+        return false;
+    }
+
+    list_t parameters = { .element_size = sizeof(node_ref_t) };
+    while (true) {
+        if (!try_consume_param(&new_ctx)) {
+            break;
+        }
+
+        node_ref_t param_ref = ctx_get_result_ref(&new_ctx);
+        list_push(&parameters, &param_ref);
+
+        // TODO: This allows for a trailing comma, not what we want, but low priority
+        if (!try_consume_token(&new_ctx, TOKEN_COMMA, NULL)) {
+            break;
+        }
+    }
+    func_sig_node.as.function_signature.parameters = parameters;
+
+    if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        list_clear(&parameters);
+        return false;
+    }
+
+    ctx_update(ctx, &new_ctx, &func_sig_node);
     return true;
 }
 

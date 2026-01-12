@@ -13,6 +13,7 @@ typedef enum {
     NODE_FLOAT,
     NODE_INT,
     NODE_LONG,
+    NODE_CHAR,
     NODE_VOID,
     NODE_PTR_TYPE,
     NODE_ASSIGNMENT,
@@ -52,6 +53,7 @@ struct node_t {
         struct {
             node_ref_t return_type_ref;
             token_t *name;
+            list_t parameters;
         } function_signature;
         struct {
             node_ref_t expr_ref;

@@ -4,6 +4,7 @@ typedef enum {
 	TYPE_INT,
 	TYPE_LONG,
 	TYPE_VOID,
+	TYPE_CHAR,
 } type_kind_t;
 
 typedef struct {
@@ -23,6 +24,10 @@ static type_t void_type = {
 	.kind = TYPE_VOID,
 	.pointer_depth = 0,
 };
+static type_t char_type = {
+	.kind = TYPE_CHAR,
+	.pointer_depth = 0,
+};
 
 static type_t type_from_node(node_t *node) {
 	switch (node->type) {
@@ -37,6 +42,9 @@ static type_t type_from_node(node_t *node) {
 		base_type.pointer_depth++;
 		return base_type;
 	}
+	case NODE_CHAR: {
+		return char_type;
+	}
 	default:
 		todo("Unhandled type conversion from node to type");
 	}
@@ -45,6 +53,7 @@ static type_t type_from_node(node_t *node) {
 typedef enum {
 	QBE_VAR_IDENTIFIER,
 	QBE_VAR_TEMP,
+	QBE_VAR_PARAM,
 } qbe_var_type_t;
 
 typedef enum {
@@ -116,6 +125,10 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 			assert(!var.global);
 			fprintf(ctx->out_file, "temp_%zu", var.as.temp);
 			break;
+		case QBE_VAR_PARAM:
+			assert(!var.global);
+			fprintf(ctx->out_file, "param_%s", var.as.identifier);
+			break;
 	}
 }
 
@@ -136,7 +149,6 @@ static qbe_value_type_t qbe_type_from_type(type_t type) {
 }
 
 static size_t qbe_type_size(qbe_value_type_t value_type) {
-	// TODO: This assumes 64-bit architecture, fine for now
 	switch (value_type) {
 		case QBE_VALUE_VOID:
 			return 0;
@@ -252,8 +264,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			return true;
 		case NODE_ASSIGNMENT: {
-			// TODO: Assigning returns the new value and can be used as an expression
-
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, true)) {
 				return false;
 			}
@@ -263,7 +273,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
-			// node_t *right_type = ctx->result_type;
 
 			// TODO: Ensure left_type and right_type are compatible
 
@@ -274,18 +283,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, ", ");
 			qbe_write_var(ctx, left_var);
 			fprintf(ctx->out_file, "\n");
-
-			// fprintf(ctx->out_file, "    ");
-			// qbe_write_var(ctx, left_var);
-			// fprintf(ctx->out_file, " =");
-			// qbe_write_type(ctx, qbe_type_from_node(left_type));
-			// if (qbe_type_from_node(left_type) == qbe_type_from_node(ctx->result_type)) {
-			// 	fprintf(ctx->out_file, "copy ");
-			// } else {
-			// 	fprintf(ctx->out_file, "cast ");
-			// }
-			// qbe_write_var(ctx, right_var);
-			// fprintf(ctx->out_file, "\n");
 		} break;
 		case NODE_ADD:
 		case NODE_SUB:
@@ -345,7 +342,16 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		case NODE_IDENTIFIER: {
 			symbol_t *symbol = find_symbol_recursive(symbol_maps, sv_from_cstr(node->as.identifier.as.identifier));
 			if (!symbol) {
-				todo("Report undeclared identifier error");
+				fprintf(stderr, "Undeclared identifier: '%s'\n", node->as.identifier.as.identifier);
+				printf("Available symbols:\n");
+				for (ssize_t i = symbol_maps->length - 1; i >= 0; i--) {
+					list_t *symbol_map = list_at(symbol_maps, list_t, i);
+					for (size_t j = 0; j < symbol_map->length; j++) {
+						symbol_t *sym = list_at(symbol_map, symbol_t, j);
+						printf("- %s\n", sym->name->as.identifier);
+					}
+				}
+				exit(1);
 			}
 
 			type_t type = type_from_node(node_ref_get(symbol->type_ref));
@@ -388,14 +394,69 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			fprintf(ctx->out_file, "export function ");
 			qbe_write_type(ctx, qbe_type_from_type(ctx->function_return_type));
-			// TODO: Handle parameters
 			qbe_write_var(ctx, (qbe_var_t) {
 				.global = true,
 				.var_type = QBE_VAR_IDENTIFIER,
 				.as.identifier = signature_node->as.function_signature.name->as.identifier,
 			});
-			fprintf(ctx->out_file, "() {\n");
+
+			push_map(symbol_maps);
+
+			fprintf(ctx->out_file, "(");
+			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
+				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
+				node_t *param_node = node_ref_get(*param_ref);
+				type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+
+				if (i > 0) {
+					fprintf(ctx->out_file, ", ");
+				}
+				qbe_write_type(ctx, qbe_type_from_type(param_type));
+				qbe_write_var(ctx, (qbe_var_t) {
+					.global = false,
+					.var_type = QBE_VAR_PARAM,
+					.as.identifier = param_node->as.var_decl.name->as.identifier,
+				});
+				
+				printf("Adding parameter symbol: %s\n", param_node->as.var_decl.name->as.identifier);
+				add_symbol(symbol_maps, (symbol_t) {
+					.name = param_node->as.var_decl.name,
+					.type_ref = param_node->as.var_decl.type_ref,
+				});
+			}
+			fprintf(ctx->out_file, ")\n{\n");
 			fprintf(ctx->out_file, "@start\n");
+
+			// Copy parameters into local stack space
+			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
+				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
+				node_t *param_node = node_ref_get(*param_ref);
+				type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+
+				qbe_var_t param_var = (qbe_var_t) {
+					.global = false,
+					.var_type = QBE_VAR_IDENTIFIER,
+					.value_type = qbe_type_from_type(param_type),
+					.as.identifier = param_node->as.var_decl.name->as.identifier,
+				};
+				qbe_var_t param_input_var = (qbe_var_t) {
+					.global = false,
+					.var_type = QBE_VAR_PARAM,
+					.value_type = qbe_type_from_type(param_type),
+					.as.identifier = param_node->as.var_decl.name->as.identifier,
+				};
+
+				fprintf(ctx->out_file, "    ");
+				qbe_write_var(ctx, param_var);
+				fprintf(ctx->out_file, " =l alloc4 %zu\n", qbe_type_size(param_var.value_type));
+				fprintf(ctx->out_file, "    store");;
+				qbe_write_type(ctx, qbe_type_from_type(param_type));
+				qbe_write_var(ctx, param_input_var);
+				fprintf(ctx->out_file, ", ");
+				qbe_write_var(ctx, param_var);
+				fprintf(ctx->out_file, "\n");
+			}
+
 			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false)) {
 				return false;
 			}
@@ -403,6 +464,8 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				fprintf(ctx->out_file, "    ret\n");
 			}
 			fprintf(ctx->out_file, "}\n");
+
+			pop_map(symbol_maps);
 		} break;
 		case NODE_RETURN: {
 			type_t expr_type = void_type;
@@ -469,23 +532,27 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t ptr_var = ctx->result_var;
+			qbe_value_type_t result_type = qbe_type_from_type(ctx->result_type);
 
-			// TODO: We're assuming all pointers point to int for now
-			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
+			qbe_var_t result_var = ctx_new_temp(ctx, result_type);
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, QBE_VALUE_WORD);
+			qbe_write_type(ctx, result_type);
 			fprintf(ctx->out_file, "load");
-			qbe_write_type(ctx, QBE_VALUE_WORD);
+			qbe_write_type(ctx, result_type);
 			qbe_write_var(ctx, ptr_var);
 			fprintf(ctx->out_file, "\n");
 
 			ctx->result_var = result_var;
-			ctx->result_type = int_type;
+			if (ctx->result_type.pointer_depth == 0) {
+				todo("Report dereference of non-pointer type error");
+			}
+			ctx->result_type.pointer_depth--;
 		} break;
 		default:
-			unreachable();
+			printf("Unhandled node type in analyze_node: %d\n", node->type);
+			todo("Unhandled node type in analyze_node");
 	}
 
 	return true;

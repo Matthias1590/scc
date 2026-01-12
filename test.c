@@ -1,5 +1,6 @@
-int main() {
-    int x = 3;
-    int *y = &x;
-    return *y;
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        return 1;
+    }
+    return 0;
 }

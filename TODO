@@ -28,7 +28,7 @@ Parsing:
 [*] Return statement
 [*] Casting
 [ ] Function call
-[ ] Pointer types
+[*] Pointer types
 
 Refactor:
 [*] Split up into modules
@@ -37,7 +37,14 @@ Refactor:
 Analysis:
 [*] Declarations
 [-] Type checking
-[-] Return checking
+[*] Return checking
 
 Codegen:
 [*] Functions
+
+---
+
+[ ] If statements
+[ ] While loops
+[ ] Forward declaration
+This is to get a hello world working.

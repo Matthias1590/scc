@@ -13,11 +13,13 @@ typedef enum {
     TOKEN_IDENTIFIER,
     TOKEN_INT,
     TOKEN_FLOAT,
+    TOKEN_CHAR,
     TOKEN_SEMICOLON,
     TOKEN_LBRACE,
     TOKEN_RBRACE,
     TOKEN_EQ,
     TOKEN_AMPERSAND,
+    TOKEN_COMMA,
     TOKEN_VOID,
     TOKEN_RETURN,
 } token_type_t;

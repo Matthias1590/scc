@@ -51,6 +51,8 @@ static bool try_consume_identifier(list_t *tokens, sv_t *code_view) {
         token.type = TOKEN_VOID;
     } else if (strcmp(buffer, "return") == 0) {
         token.type = TOKEN_RETURN;
+    } else if (strcmp(buffer, "char") == 0) {
+        token.type = TOKEN_CHAR;
     } else {
         strcpy(token.as.identifier, buffer);
     }
@@ -85,6 +87,8 @@ static bool try_consume_symbol(list_t *tokens, sv_t *code_view) {
         token.type = TOKEN_EQ;
     } else if (code_view->string[0] == '&') {
         token.type = TOKEN_AMPERSAND;
+    } else if (code_view->string[0] == ',') {
+        token.type = TOKEN_COMMA;
     } else {
         return false;
     }
