@@ -24,6 +24,8 @@ source_loc_t ctx_get_source_loc(const lex_ctx_t *ctx) {
 }
 
 static bool try_consume_intlit(lex_ctx_t *ctx) {
+    source_loc_t start_loc = ctx_get_source_loc(ctx);
+
     size_t i = 0;
     while (i < ctx->code_view->length && isdigit(ctx->code_view->string[i])) {
         i++;
@@ -36,18 +38,20 @@ static bool try_consume_intlit(lex_ctx_t *ctx) {
 
     char buffer[32];
     if (intlit_sv.length >= sizeof(buffer)) {
-        report_error(ctx_get_source_loc(ctx), "Integer literal too long");
+        report_error(start_loc, "Integer literal too long");
     }
 
     sv_to_cstr(intlit_sv, buffer, sizeof(buffer));
 
-    token_t token = { .type = TOKEN_INTLIT, .as.intlit = atoi(buffer) };
+    token_t token = { .type = TOKEN_INTLIT, .source_loc = start_loc, .as.intlit = atoi(buffer) };
     list_push(ctx->tokens, &token);
 
     return true;
 }
 
 static bool try_consume_identifier(lex_ctx_t *ctx) {
+    source_loc_t start_loc = ctx_get_source_loc(ctx);
+
     size_t i = 0;
     while (i < ctx->code_view->length && isalpha(ctx->code_view->string[i])) {
         i++;
@@ -60,12 +64,12 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
 
     char buffer[32];
     if (identifier_sv.length >= sizeof(buffer)) {
-        report_error(ctx_get_source_loc(ctx), "Identifier too long");  // TODO: Shouldn't be an error
+        report_error(start_loc, "Identifier too long");  // TODO: Shouldn't be an error
     }
 
     sv_to_cstr(identifier_sv, buffer, sizeof(buffer));
 
-    token_t token = { .type = TOKEN_IDENTIFIER };
+    token_t token = { .type = TOKEN_IDENTIFIER, .source_loc = start_loc };
     if (strcmp(buffer, "int") == 0) {
         token.type = TOKEN_INT;
     } else if (strcmp(buffer, "float") == 0) {
@@ -81,12 +85,12 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
     }
 
     list_push(ctx->tokens, &token);
-
     return true;
 }
 
 static bool try_consume_symbol(lex_ctx_t *ctx) {
-    token_t token;
+    source_loc_t start_loc = ctx_get_source_loc(ctx);
+    token_t token = { .source_loc = start_loc };
 
     if (ctx->code_view->string[0] == '+') {
         token.type = TOKEN_PLUS;
