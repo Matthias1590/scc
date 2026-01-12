@@ -1,14 +1,46 @@
 #include "scc.h"
 
-static node_t int_type = {
-	.type = NODE_INT,
+typedef enum {
+	TYPE_INT,
+	TYPE_LONG,
+	TYPE_VOID,
+} type_kind_t;
+
+typedef struct {
+	type_kind_t kind;
+	size_t pointer_depth;
+} type_t;
+
+static type_t int_type = {
+	.kind = TYPE_INT,
+	.pointer_depth = 0,
 };
-static node_t long_type = {
-	.type = NODE_LONG,
+static type_t long_type = {
+	.kind = TYPE_LONG,
+	.pointer_depth = 0,
 };
-static node_t void_type = {
-	.type = NODE_VOID,
+static type_t void_type = {
+	.kind = TYPE_VOID,
+	.pointer_depth = 0,
 };
+
+static type_t type_from_node(node_t *node) {
+	switch (node->type) {
+	case NODE_INT:
+		return int_type;
+	case NODE_LONG:
+		return long_type;
+	case NODE_VOID:
+		return void_type;
+	case NODE_PTR_TYPE: {
+		type_t base_type = type_from_node(node_ref_get(node->as.ptr_type.base_type_ref));
+		base_type.pointer_depth++;
+		return base_type;
+	}
+	default:
+		todo("Unhandled type conversion from node to type");
+	}
+}
 
 typedef enum {
 	QBE_VAR_IDENTIFIER,
@@ -35,8 +67,8 @@ typedef struct {
 typedef struct {
 	FILE *out_file;
 	qbe_var_t result_var;
-	node_t *result_type;
-	node_ref_t function_return_type_ref;
+	type_t result_type;
+	type_t function_return_type;
 	size_t next_temp;
 } codegen_ctx_t;
 
@@ -87,18 +119,19 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 	}
 }
 
-static qbe_value_type_t qbe_type_from_node(node_t *node) {
-	switch (node->type) {
-	case NODE_VOID:
-		return QBE_VALUE_VOID;
-	case NODE_INT:
+static qbe_value_type_t qbe_type_from_type(type_t type) {
+	if (type.pointer_depth > 0) {
+		return QBE_VALUE_LONG;
+	}
+	switch (type.kind) {
+	case TYPE_INT:
 		return QBE_VALUE_WORD;
-	case NODE_FLOAT:
-		return QBE_VALUE_SINGLE;
-	case NODE_PTR_TYPE:
-		return QBE_VALUE_LONG;  // TODO: This assumes all pointers are word sized
+	case TYPE_LONG:
+		return QBE_VALUE_LONG;
+	case TYPE_VOID:
+		return QBE_VALUE_VOID;
 	default:
-		todo("Unhandled type conversion from node to qbe type");
+		todo("Unhandled type conversion from type to qbe type");
 	}
 }
 
@@ -163,40 +196,16 @@ static void add_symbol(list_t *symbol_maps, symbol_t symbol) {
 	list_push(current_map, &symbol);
 }
 
-// 	node_t *node = node_ref_get(node_ref);
-
-// 	switch (node->type) {
-	// 	case NODE_ASSIGNMENT: {
-		// 		if (!gen_node(ctx, node->as.binop.right_ref)) {
-			// 			return false;
-// 		}
-// 		qbe_var_t right_var = ctx->result_var;
-// 		if (!gen_node(ctx, node->as.binop.left_ref)) {
-	// 			return false;
-	// 		}
-	// 		qbe_write_var(ctx, ctx->result_var);
-	// 		fprintf(ctx->out_file, " =");
-	// 		qbe_write_type(ctx, qbe_type_from_node(node_get_type(node->as.binop.left_ref)));
-	// 	} break;
-	// 	default:
-	// 		todo("Unhandled node type in codegen");
-	// 	}
-
-	// 	return true;
-
 bool is_global_map(list_t *symbol_maps) {
 	return symbol_maps->length == 1;
 }
 
-static bool type_eq(node_t *a, node_t *b) {
-	// TODO: This only works for primitives
-	return a->type == b->type;
+static bool type_eq(type_t a, type_t b) {
+	return a.kind == b.kind && a.pointer_depth == b.pointer_depth;
 }
 
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue) {
 	node_t *node = node_ref_get(node_ref);
-
-	printf("Analyzing node of type %d\n", node->type);
 
 	switch (node->type) {
 		case NODE_BLOCK:
@@ -214,10 +223,11 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				.name = node->as.var_decl.name,
 				.type_ref = node->as.var_decl.type_ref,
 			});
+			type_t type = type_from_node(node_ref_get(node->as.var_decl.type_ref));
 			qbe_var_t var = (qbe_var_t) {
 				.global = is_global_map(symbol_maps),
 				.var_type = QBE_VAR_IDENTIFIER,
-				.value_type = qbe_type_from_node(node_ref_get(node->as.var_decl.type_ref)),
+				.value_type = qbe_type_from_type(type),
 				.as.identifier = node->as.var_decl.name->as.identifier,
 			};
 
@@ -234,7 +244,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				}
 				fprintf(ctx->out_file, "    ");
 				fprintf(ctx->out_file, "store");
-				qbe_write_type(ctx, qbe_type_from_node(node_ref_get(node->as.var_decl.type_ref)));
+				qbe_write_type(ctx, qbe_type_from_type(type));
 				qbe_write_var(ctx, ctx->result_var);
 				fprintf(ctx->out_file, ", ");
 				qbe_write_var(ctx, var);
@@ -248,7 +258,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
-			node_t *left_type = ctx->result_type;
+			type_t left_type = ctx->result_type;
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
 				return false;
 			}
@@ -259,7 +269,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			fprintf(ctx->out_file, "    ");
 			fprintf(ctx->out_file, "store");;
-			qbe_write_type(ctx, qbe_type_from_node(left_type));
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
 			qbe_write_var(ctx, right_var);
 			fprintf(ctx->out_file, ", ");
 			qbe_write_var(ctx, left_var);
@@ -285,7 +295,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
-			node_t *left_type = ctx->result_type;
+			type_t left_type = ctx->result_type;
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
 				return false;
 			}
@@ -294,11 +304,11 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			// TODO: Ensure left_type and right_type are compatible
 
-			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_node(left_type));
+			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(left_type));
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, qbe_type_from_node(left_type));
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
 			switch (node->type) {
 				case NODE_ADD:
 					fprintf(ctx->out_file, "add ");
@@ -330,7 +340,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, " =");
 			qbe_write_type(ctx, QBE_VALUE_WORD);
 			fprintf(ctx->out_file, "copy %d\n", node->as.intlit.as.intlit);
-			ctx->result_type = &int_type;
+			ctx->result_type = int_type;
 			return true;
 		case NODE_IDENTIFIER: {
 			symbol_t *symbol = find_symbol_recursive(symbol_maps, sv_from_cstr(node->as.identifier.as.identifier));
@@ -338,37 +348,38 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				todo("Report undeclared identifier error");
 			}
 
+			type_t type = type_from_node(node_ref_get(symbol->type_ref));
 			qbe_var_t var = (qbe_var_t) {
 				.global = is_global_map(symbol_maps),
 				.var_type = QBE_VAR_IDENTIFIER,
-				.value_type = qbe_type_from_node(node_ref_get(symbol->type_ref)),
+				.value_type = qbe_type_from_type(type),
 				.as.identifier = symbol->name->as.identifier,
 			};
 
 			if (emit_lvalue) {
 				// Just return the address
 				ctx->result_var = var;
-				ctx->result_type = node_ref_get(symbol->type_ref);
+				ctx->result_type = type;
 			} else {
 				// Deref
-				qbe_var_t temp = ctx_new_temp(ctx, qbe_type_from_node(node_ref_get(symbol->type_ref)));
+				qbe_var_t temp = ctx_new_temp(ctx, qbe_type_from_type(type));
 				fprintf(ctx->out_file, "    ");
 				qbe_write_var(ctx, temp);
 				fprintf(ctx->out_file, " =");
-				qbe_write_type(ctx, qbe_type_from_node(node_ref_get(symbol->type_ref)));
+				qbe_write_type(ctx, qbe_type_from_type(type));
 				fprintf(ctx->out_file, "load");
-				qbe_write_type(ctx, qbe_type_from_node(node_ref_get(symbol->type_ref)));
+				qbe_write_type(ctx, qbe_type_from_type(type));
 				qbe_write_var(ctx, var);
 				fprintf(ctx->out_file, "\n");
 
 				ctx->result_var = temp;
-				ctx->result_type = node_ref_get(symbol->type_ref);
+				ctx->result_type = type_from_node(node_ref_get(symbol->type_ref));
 			}
 		} break;
 		case NODE_FUNCTION: {
 			node_t *signature_node = node_ref_get(node->as.function.signature_ref);
 			node_t *return_type_node = node_ref_get(signature_node->as.function_signature.return_type_ref);
-			ctx->function_return_type_ref = signature_node->as.function_signature.return_type_ref;
+			ctx->function_return_type = type_from_node(return_type_node);
 
 			add_symbol(symbol_maps, (symbol_t) {
 				.name = signature_node->as.function_signature.name,
@@ -376,7 +387,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			});
 
 			fprintf(ctx->out_file, "export function ");
-			qbe_write_type(ctx, qbe_type_from_node(return_type_node));
+			qbe_write_type(ctx, qbe_type_from_type(ctx->function_return_type));
 			// TODO: Handle parameters
 			qbe_write_var(ctx, (qbe_var_t) {
 				.global = true,
@@ -388,15 +399,13 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false)) {
 				return false;
 			}
-			if (return_type_node->type == NODE_VOID) {
+			if (type_eq(ctx->function_return_type, void_type)) {
 				fprintf(ctx->out_file, "    ret\n");
 			}
 			fprintf(ctx->out_file, "}\n");
 		} break;
 		case NODE_RETURN: {
-			node_t *function_return_type = node_ref_get(ctx->function_return_type_ref);
-
-			node_t *expr_type = &void_type;
+			type_t expr_type = void_type;
 			if (!node_ref_is_null(node->as.ret.expr_ref)) {
 				if (!analyze_node(ctx, symbol_maps, node->as.ret.expr_ref, false)) {
 					return false;
@@ -405,12 +414,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 
 			// TODO: Implicit casting should be handled somewhere, probably not here though
-			if (!type_eq(function_return_type, expr_type)) {
+			if (!type_eq(ctx->function_return_type, expr_type)) {
 				todo("Report return type mismatch error");
 			}
 
 			// Early return for void functions
-			if (expr_type->type == NODE_VOID) {
+			if (type_eq(expr_type, void_type)) {
 				fprintf(ctx->out_file, "    ret\n");
 				return true;
 			}
@@ -424,19 +433,20 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t expr_var = ctx->result_var;
-			node_t *expr_type = ctx->result_type;
+			type_t expr_type = ctx->result_type;
 
-			node_t *target_type = node_ref_get(node->as.cast.target_type_ref);
+			type_t target_type = type_from_node(node_ref_get(node->as.cast.target_type_ref));
+			qbe_value_type_t target_qbe_type = qbe_type_from_type(target_type);
 
 			// TODO: Ensure expr_type can be cast to target_type
 
-			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_node(target_type));
+			qbe_var_t result_var = ctx_new_temp(ctx, target_qbe_type);
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, qbe_type_from_node(target_type));
+			qbe_write_type(ctx, target_qbe_type);
 			// If the cast is unnecessary, just copy instead of casting
-			if (qbe_type_from_node(target_type) == qbe_type_from_node(expr_type)) {
+			if (qbe_type_from_type(target_type) == qbe_type_from_type(expr_type)) {
 				fprintf(ctx->out_file, "copy ");
 			} else {
 				fprintf(ctx->out_file, "cast ");
@@ -452,8 +462,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 
-			ctx->result_var = ctx->result_var;
-			ctx->result_type = &long_type; // TODO: This should be a pointer type to the original type
+			ctx->result_type.pointer_depth++;
 		} break;
 		case NODE_DEREF: {
 			if (!analyze_node(ctx, symbol_maps, node->as.deref.expr_ref, false)) {
@@ -473,7 +482,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "\n");
 
 			ctx->result_var = result_var;
-			ctx->result_type = &int_type;
+			ctx->result_type = int_type;
 		} break;
 		default:
 			unreachable();

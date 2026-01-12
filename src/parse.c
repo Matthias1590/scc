@@ -1,7 +1,5 @@
 #include "scc.h"
 
-#define TRACE(...) printf(__VA_ARGS__)
-
 typedef struct {
     list_t *nodes;
     lv_t *token_view;
@@ -161,7 +159,7 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     }
 
     *ctx = new_ctx;
-    TRACE("try_consume_type succeeded\n");
+    trace("try_consume_type succeeded\n");
     return true;
 }
 
@@ -179,7 +177,7 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &var_node);
 
-    TRACE("try_consume_lhs succeeded\n");
+    trace("try_consume_lhs succeeded\n");
     return true;
 }
 
@@ -197,7 +195,7 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &node);
 
-    TRACE("try_consume_intlit succeeded\n");
+    trace("try_consume_intlit succeeded\n");
     return true;
 }
 
@@ -219,7 +217,7 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
 
     ctx_update(ctx, &new_ctx, node_ref_get(ctx_get_result_ref(&new_ctx)));
 
-    TRACE("try_consume_parens succeeded\n");
+    trace("try_consume_parens succeeded\n");
     return true;
 }
 
@@ -251,7 +249,7 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &cast_node);
 
-    TRACE("try_consume_cast succeeded\n");
+    trace("try_consume_cast succeeded\n");
     return true;
 }
 
@@ -273,7 +271,7 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &ptr_node);
 
-    TRACE("try_consume_address_of succeeded\n");
+    trace("try_consume_address_of succeeded\n");
     return true;
 }
 
@@ -295,7 +293,7 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &deref_node);
 
-    TRACE("try_consume_deref succeeded\n");
+    trace("try_consume_deref succeeded\n");
     return true;
 }
 
@@ -334,7 +332,7 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        TRACE("try_consume_mult succeeded\n");
+        trace("try_consume_mult succeeded\n");
     }
     return parsed;
 }
@@ -365,7 +363,7 @@ static bool try_consume_div(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        TRACE("try_consume_div succeeded\n");
+        trace("try_consume_div succeeded\n");
     }
     return parsed;
 }
@@ -387,7 +385,7 @@ static bool try_consume_expr_1(parse_ctx_t *ctx) {
         break;
     }
 
-    TRACE("try_consume_expr_1 succeeded\n");
+    trace("try_consume_expr_1 succeeded\n");
     return true;
 }
 
@@ -417,7 +415,7 @@ static bool try_consume_add(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        TRACE("try_consume_add succeeded\n");
+        trace("try_consume_add succeeded\n");
     }
     return parsed;
 }
@@ -448,7 +446,7 @@ static bool try_consume_sub(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        TRACE("try_consume_sub succeeded\n");
+        trace("try_consume_sub succeeded\n");
     }
     return parsed;
 }
@@ -470,7 +468,7 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
         break;
     }
 
-    TRACE("try_consume_expr_0 succeeded\n");
+    trace("try_consume_expr_0 succeeded\n");
     return true;
 }
 

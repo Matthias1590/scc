@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef DEBUG
+    #define trace(...) printf(__VA_ARGS__)
+#else
+    #define trace(...)
+#endif
+
 #define unused(x) (void)(x)
 
 #define assert(expr) \
