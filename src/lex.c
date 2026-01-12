@@ -80,6 +80,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_RETURN;
     } else if (strcmp(buffer, "char") == 0) {
         token.type = TOKEN_CHAR;
+    } else if (strcmp(buffer, "if") == 0) {
+        token.type = TOKEN_IF;
     } else {
         strcpy(token.as.identifier, buffer);
     }
@@ -116,6 +118,14 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
         token.type = TOKEN_AMPERSAND;
     } else if (ctx->code_view->string[0] == ',') {
         token.type = TOKEN_COMMA;
+    } else if (ctx->code_view->string[0] == '!') {
+        if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '=') {
+            token.type = TOKEN_NEQ;
+            sv_consume(ctx->code_view, 1); // consume extra '='
+        } else {
+            // TODO: Unary NOT token
+            return false;
+        }
     } else {
         return false;
     }
@@ -196,6 +206,27 @@ void token_print(const token_t *token) {
             break;
         case TOKEN_EQ:
             printf("EQ");
+            break;
+        case TOKEN_AMPERSAND:
+            printf("AMPERSAND");
+            break;
+        case TOKEN_COMMA:
+            printf("COMMA");
+            break;
+        case TOKEN_VOID:
+            printf("VOID");
+            break;
+        case TOKEN_RETURN:
+            printf("RETURN");
+            break;
+        case TOKEN_NEQ:
+            printf("NEQ");
+            break;
+        case TOKEN_CHAR:
+            printf("CHAR");
+            break;
+        case TOKEN_IF:
+            printf("IF");
             break;
         default:
             unreachable();

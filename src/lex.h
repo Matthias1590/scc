@@ -22,6 +22,8 @@ typedef enum {
     TOKEN_COMMA,
     TOKEN_VOID,
     TOKEN_RETURN,
+    TOKEN_IF,
+    TOKEN_NEQ,
 } token_type_t;
 
 typedef struct {

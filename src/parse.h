@@ -24,6 +24,8 @@ typedef enum {
     NODE_CAST,
     NODE_ADDRESS_OF,
     NODE_DEREF,
+    NODE_IF,
+    NODE_NEQ,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -34,6 +36,7 @@ typedef struct {
 } node_ref_t;
 
 struct node_t {
+    source_loc_t source_loc;
     node_type_t type;
     union {
         token_t intlit;
@@ -71,6 +74,10 @@ struct node_t {
         struct {
             node_ref_t expr_ref;
         } deref;
+        struct {
+            node_ref_t expr_ref;
+            node_ref_t then_ref;
+        } if_;
         token_t identifier;
         list_t block;
     } as;

@@ -106,6 +106,9 @@ void node_print(node_ref_t ref) {
     }
 }
 
+static bool try_consume_stmt(parse_ctx_t *ctx);
+static bool try_consume_block(parse_ctx_t *ctx);
+
 static bool try_consume_token(parse_ctx_t *ctx, token_type_t expected_type, token_t **token) {
     if (ctx->token_view->length == 0) {
         return false;
@@ -133,6 +136,7 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     node_t type_node;
 
     token_t *token = lv_at(new_ctx.token_view, token_t, 0);
+    type_node.source_loc = token->source_loc;
     if (token->type == TOKEN_INT) {
         type_node.type = NODE_INT;
     } else if (token->type == TOKEN_FLOAT) {
@@ -151,9 +155,11 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     list_push(new_ctx.nodes, &type_node);
     *new_ctx.result_index = new_ctx.nodes->length - 1;
 
-    while (try_consume_token(&new_ctx, TOKEN_STAR, NULL)) {
+    token_t *star_token;
+    while (try_consume_token(&new_ctx, TOKEN_STAR, &star_token)) {
         node_t ptr_node = {
             .type = NODE_PTR_TYPE,
+            .source_loc = star_token->source_loc,
             .as.ptr_type.base_type_ref = ctx_get_result_ref(&new_ctx),
         };
         list_push(new_ctx.nodes, &ptr_node);
@@ -175,6 +181,7 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
 
     node_t var_node = {
         .type = NODE_IDENTIFIER,
+        .source_loc = identifier_token->source_loc,
         .as.identifier = *identifier_token,
     };
     ctx_update(ctx, &new_ctx, &var_node);
@@ -193,6 +200,7 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
 
     node_t node = {
         .type = NODE_INTLIT,
+        .source_loc = intlit_token->source_loc,
         .as.intlit = *intlit_token
     };
     ctx_update(ctx, &new_ctx, &node);
@@ -207,7 +215,8 @@ static bool try_consume_expr_2(parse_ctx_t *ctx);
 static bool try_consume_parens(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+    token_t *lpar_token;
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, &lpar_token)) {
         return false;
     }
     if (!try_consume_expr_0(&new_ctx)) {
@@ -217,7 +226,9 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
         return false;
     }
 
-    ctx_update(ctx, &new_ctx, node_ref_get(ctx_get_result_ref(&new_ctx)));
+    node_t *expr_node = node_ref_get(ctx_get_result_ref(&new_ctx));
+    expr_node->source_loc = lpar_token->source_loc;
+    ctx_update(ctx, &new_ctx, expr_node);
 
     trace("try_consume_parens succeeded\n");
     return true;
@@ -226,7 +237,8 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
 static bool try_consume_cast(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+    token_t *lpar_token;
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, &lpar_token)) {
         return false;
     }
 
@@ -246,6 +258,7 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
 
     node_t cast_node = {
         .type = NODE_CAST,
+        .source_loc = lpar_token->source_loc,
         .as.cast.target_type_ref = target_type_ref,
         .as.cast.expr_ref = expr_ref,
     };
@@ -258,7 +271,8 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
 static bool try_consume_address_of(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_AMPERSAND, NULL)) {
+    token_t *amp_token;
+    if (!try_consume_token(&new_ctx, TOKEN_AMPERSAND, &amp_token)) {
         return false;
     }
 
@@ -269,6 +283,7 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
 
     node_t ptr_node = {
         .type = NODE_ADDRESS_OF,
+        .source_loc = amp_token->source_loc,
         .as.address_of.expr_ref = expr_ref,
     };
     ctx_update(ctx, &new_ctx, &ptr_node);
@@ -280,7 +295,8 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
 static bool try_consume_deref(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_STAR, NULL)) {
+    token_t *star_token;
+    if (!try_consume_token(&new_ctx, TOKEN_STAR, &star_token)) {
         return false;
     }
 
@@ -291,6 +307,7 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
 
     node_t deref_node = {
         .type = NODE_DEREF,
+        .source_loc = star_token->source_loc,
         .as.deref.expr_ref = expr_ref,
     };
     ctx_update(ctx, &new_ctx, &deref_node);
@@ -314,6 +331,7 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
     bool parsed = false;
 
     node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
     while (try_consume_token(&new_ctx, TOKEN_STAR, NULL)) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
@@ -324,6 +342,7 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
 
         node_t mult_node = {
             .type = NODE_MULT,
+            .source_loc = source_loc,
             .as.binop = {
                 .left_ref = left_ref,
                 .right_ref = right_ref
@@ -345,6 +364,7 @@ static bool try_consume_div(parse_ctx_t *ctx) {
     bool parsed = false;
 
     node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
     while (try_consume_token(&new_ctx, TOKEN_SLASH, NULL)) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
@@ -355,6 +375,7 @@ static bool try_consume_div(parse_ctx_t *ctx) {
 
         node_t div_node = {
             .type = NODE_DIV,
+            .source_loc = source_loc,
             .as.binop = {
                 .left_ref = left_ref,
                 .right_ref = right_ref
@@ -397,6 +418,7 @@ static bool try_consume_add(parse_ctx_t *ctx) {
     bool parsed = false;
 
     node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
     while (try_consume_token(&new_ctx, TOKEN_PLUS, NULL)) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
@@ -407,6 +429,7 @@ static bool try_consume_add(parse_ctx_t *ctx) {
 
         node_t add_node = {
             .type = NODE_ADD,
+            .source_loc = source_loc,
             .as.binop = {
                 .left_ref = left_ref,
                 .right_ref = right_ref
@@ -428,6 +451,7 @@ static bool try_consume_sub(parse_ctx_t *ctx) {
     bool parsed = false;
 
     node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
     while (try_consume_token(&new_ctx, TOKEN_MINUS, NULL)) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
@@ -438,6 +462,7 @@ static bool try_consume_sub(parse_ctx_t *ctx) {
 
         node_t sub_node = {
             .type = NODE_SUB,
+            .source_loc = source_loc,
             .as.binop = {
                 .left_ref = left_ref,
                 .right_ref = right_ref
@@ -449,6 +474,39 @@ static bool try_consume_sub(parse_ctx_t *ctx) {
 
     if (parsed) {
         trace("try_consume_sub succeeded\n");
+    }
+    return parsed;
+}
+
+static bool try_consume_neq(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_NEQ, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t neq_node = {
+            .type = NODE_NEQ,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &neq_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_neq succeeded\n");
     }
     return parsed;
 }
@@ -465,6 +523,9 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
             continue;
         }
         if (try_consume_sub(&new_ctx)) {
+            continue;
+        }
+        if (try_consume_neq(&new_ctx)) {  // TODO: Im pretty sure this operator precedence is wrong
             continue;
         }
         break;
@@ -489,6 +550,7 @@ static bool try_consume_var_decl(parse_ctx_t *ctx) {
 
     node_t var_decl_node = {
         .type = NODE_VAR_DECL,
+        .source_loc = node_ref_get(type_ref)->source_loc,
         .as.var_decl.type_ref = type_ref,
         .as.var_decl.name = identifier_token,
     };
@@ -515,12 +577,14 @@ static bool try_consume_var_decl(parse_ctx_t *ctx) {
 static bool try_consume_return(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_RETURN, NULL)) {
+    token_t *return_token;
+    if (!try_consume_token(&new_ctx, TOKEN_RETURN, &return_token)) {
         return false;
     }
 
     node_t ret_node = {
         .type = NODE_RETURN,
+        .source_loc = return_token->source_loc,
     };
 
     if (try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
@@ -538,6 +602,41 @@ static bool try_consume_return(parse_ctx_t *ctx) {
     }
 
     ctx_update(ctx, &new_ctx, &ret_node);
+    return true;
+}
+
+static bool try_consume_if(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    token_t *if_token;
+    if (!try_consume_token(&new_ctx, TOKEN_IF, &if_token)) {
+        return false;
+    }
+
+    node_t if_node = {
+        .type = NODE_IF,
+        .source_loc = if_token->source_loc,
+    };
+
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_expr_0(&new_ctx)) {
+        return false;
+    }
+    if_node.as.if_.expr_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_stmt(&new_ctx)) {
+        return false;
+    }
+    if_node.as.if_.then_ref = ctx_get_result_ref(&new_ctx);
+
+    ctx_update(ctx, &new_ctx, &if_node);
     return true;
 }
 
@@ -564,6 +663,7 @@ static bool try_consume_assignment(parse_ctx_t *ctx) {
 
     node_t assignment_node = {
         .type = NODE_ASSIGNMENT,
+        .source_loc = node_ref_get(left_ref)->source_loc,
         .as.binop.left_ref = left_ref,
         .as.binop.right_ref = right_ref,
     };
@@ -575,13 +675,16 @@ static bool try_consume_assignment(parse_ctx_t *ctx) {
 static bool try_consume_stmt(parse_ctx_t *ctx) {
     return try_consume_var_decl(ctx)
         || try_consume_assignment(ctx)
-        || try_consume_return(ctx);
+        || try_consume_return(ctx)
+        || try_consume_if(ctx)
+        || try_consume_block(ctx);
 }
 
 static bool try_consume_block(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_token(&new_ctx, TOKEN_LBRACE, NULL)) {
+    token_t *start_token;
+    if (!try_consume_token(&new_ctx, TOKEN_LBRACE, &start_token)) {
         return false;
     }
 
@@ -601,6 +704,7 @@ static bool try_consume_block(parse_ctx_t *ctx) {
 
     node_t block_node = {
         .type = NODE_BLOCK,
+        .source_loc = start_token->source_loc,
         .as.block = stmts,
     };
     ctx_update(ctx, &new_ctx, &block_node);
@@ -623,6 +727,7 @@ static bool try_consume_param(parse_ctx_t *ctx) {
 
     node_t param_node = {
         .type = NODE_VAR_DECL,
+        .source_loc = node_ref_get(type_ref)->source_loc,
         .as.var_decl.type_ref = type_ref,
         .as.var_decl.name = identifier_token,
     };
@@ -647,6 +752,7 @@ bool try_consume_function_signature(parse_ctx_t *ctx) {
     
     node_t func_sig_node = {
         .type = NODE_FUNCTION_SIGNATURE,
+        .source_loc = node_ref_get(return_type_ref)->source_loc,
         .as.function_signature.return_type_ref = return_type_ref,
         .as.function_signature.name = identifier_token,
     };
@@ -690,6 +796,7 @@ bool try_consume_function(parse_ctx_t *ctx) {
 
     node_t function_node = {
         .type = NODE_FUNCTION,
+        .source_loc = node_ref_get(func_sig_ref)->source_loc,
         .as.function.signature_ref = func_sig_ref,
     };
 

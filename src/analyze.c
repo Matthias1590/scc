@@ -418,7 +418,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 					.as.identifier = param_node->as.var_decl.name->as.identifier,
 				});
 				
-				printf("Adding parameter symbol: %s\n", param_node->as.var_decl.name->as.identifier);
 				add_symbol(symbol_maps, (symbol_t) {
 					.name = param_node->as.var_decl.name,
 					.type_ref = param_node->as.var_decl.type_ref,
@@ -546,9 +545,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			ctx->result_var = result_var;
 			if (ctx->result_type.pointer_depth == 0) {
-				todo("Report dereference of non-pointer type error");
+				report_error(node->source_loc, "Cannot dereference non-pointer type");
 			}
 			ctx->result_type.pointer_depth--;
+		} break;
+		case NODE_NEQ: {
+			todo("Implement NEQ analysis");  // LEFTOFF
 		} break;
 		default:
 			printf("Unhandled node type in analyze_node: %d\n", node->type);
