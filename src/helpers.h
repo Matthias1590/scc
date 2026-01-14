@@ -35,4 +35,7 @@
         abort(); \
     } while (0)
 
+#define debug_var(type, name, value) type name = value; \
+    unused(name)
+
 char *read_file(const char *path);

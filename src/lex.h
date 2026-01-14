@@ -4,6 +4,7 @@
 
 typedef enum {
     TOKEN_INTLIT,
+    TOKEN_STRINGLIT,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,

@@ -29,6 +29,7 @@ typedef enum {
     NODE_FILE,
     NODE_CALL,
     NODE_EQEQ,
+    NODE_DISCARD,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -89,6 +90,9 @@ struct node_t {
             node_ref_t function_ref;
             list_t arg_refs;
         } call;
+        struct {
+            node_ref_t expr_ref;
+        } discard;
         token_t identifier;
         list_t block;
     } as;

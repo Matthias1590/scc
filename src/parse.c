@@ -235,6 +235,8 @@ static bool try_consume_type(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_lhs(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(ctx->token_view, token_t, 0));
+
     trace("+ try_consume_lhs\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -882,12 +884,35 @@ static bool try_consume_assignment(parse_ctx_t *ctx) {
     return true;
 }
 
+// LEFTOFF: Was debugging this, current test.c doesn't work
+static bool try_consume_discard(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_expr_0(&new_ctx)) {
+        return false;
+    }
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
+        return false;
+    }
+
+    node_t discard_node = {
+        .type = NODE_DISCARD,
+        .source_loc = node_ref_get(expr_ref)->source_loc,
+        .as.discard.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &discard_node);
+    return true;
+}
+
 static bool try_consume_stmt(parse_ctx_t *ctx) {
     return try_consume_var_decl(ctx)
         || try_consume_assignment(ctx)
         || try_consume_return(ctx)
         || try_consume_if(ctx)
-        || try_consume_block(ctx);
+        || try_consume_block(ctx)
+        || try_consume_discard(ctx);
 }
 
 static bool try_consume_block(parse_ctx_t *ctx) {

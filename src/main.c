@@ -12,10 +12,10 @@ int main(void) {
         todo("Handle tokenization error");
     }
 
-    // for (size_t i = 0; i < tokens.length; i++) {
-    //     token_print(list_at(&tokens, token_t, i));
-    //     printf("\n");
-    // }
+    for (size_t i = 0; i < tokens.length; i++) {
+        token_print(list_at(&tokens, token_t, i));
+        printf("\n");
+    }
 
     list_t nodes = { .element_size = sizeof(node_t) };
     node_ref_t root_ref;
