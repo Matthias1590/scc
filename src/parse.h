@@ -26,6 +26,8 @@ typedef enum {
     NODE_DEREF,
     NODE_IF,
     NODE_NEQ,
+    NODE_FILE,
+    NODE_CALL,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -78,6 +80,13 @@ struct node_t {
             node_ref_t expr_ref;
             node_ref_t then_ref;
         } if_;
+        struct {
+            list_t top_levels;
+        } file;
+        struct {
+            node_ref_t function_ref;
+            list_t arg_refs;
+        } call;
         token_t identifier;
         list_t block;
     } as;

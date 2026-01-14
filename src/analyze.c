@@ -5,6 +5,7 @@ typedef enum {
 	TYPE_LONG,
 	TYPE_VOID,
 	TYPE_CHAR,
+	TYPE_FUNC,
 } type_kind_t;
 
 typedef struct {
@@ -28,6 +29,10 @@ static type_t char_type = {
 	.kind = TYPE_CHAR,
 	.pointer_depth = 0,
 };
+static type_t func_type = {
+	.kind = TYPE_FUNC,
+	.pointer_depth = 0,
+};
 
 static type_t type_from_node(node_t *node) {
 	switch (node->type) {
@@ -44,6 +49,9 @@ static type_t type_from_node(node_t *node) {
 	}
 	case NODE_CHAR: {
 		return char_type;
+	}
+	case NODE_FUNCTION_SIGNATURE: {
+		return func_type;
 	}
 	default:
 		todo("Unhandled type conversion from node to type");
@@ -74,10 +82,15 @@ typedef struct {
 } qbe_var_t;
 
 typedef struct {
+	size_t label_num;
+} qbe_label_t;
+
+typedef struct {
 	FILE *out_file;
 	qbe_var_t result_var;
 	type_t result_type;
 	type_t function_return_type;
+	size_t next_label;
 	size_t next_temp;
 } codegen_ctx_t;
 
@@ -89,6 +102,13 @@ static qbe_var_t ctx_new_temp(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
 		.as.temp = ctx->next_temp++,
 	};
 	return temp_var;
+}
+
+static qbe_label_t ctx_new_label(codegen_ctx_t *ctx) {
+	qbe_label_t label = {
+		.label_num = ctx->next_label++,
+	};
+	return label;
 }
 
 static void qbe_write_type(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
@@ -143,6 +163,8 @@ static qbe_value_type_t qbe_type_from_type(type_t type) {
 		return QBE_VALUE_LONG;
 	case TYPE_VOID:
 		return QBE_VALUE_VOID;
+	case TYPE_FUNC:
+		return QBE_VALUE_LONG;
 	default:
 		todo("Unhandled type conversion from type to qbe type");
 	}
@@ -417,7 +439,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 					.var_type = QBE_VAR_PARAM,
 					.as.identifier = param_node->as.var_decl.name->as.identifier,
 				});
-				
+
 				add_symbol(symbol_maps, (symbol_t) {
 					.name = param_node->as.var_decl.name,
 					.type_ref = param_node->as.var_decl.type_ref,
@@ -459,8 +481,11 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false)) {
 				return false;
 			}
+			fprintf(ctx->out_file, "@end\n");
 			if (type_eq(ctx->function_return_type, void_type)) {
 				fprintf(ctx->out_file, "    ret\n");
+			} else {
+				fprintf(ctx->out_file, "    ret %%result\n");
 			}
 			fprintf(ctx->out_file, "}\n");
 
@@ -480,15 +505,16 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				todo("Report return type mismatch error");
 			}
 
-			// Early return for void functions
-			if (type_eq(expr_type, void_type)) {
-				fprintf(ctx->out_file, "    ret\n");
-				return true;
+			// Write return value to %result
+			if (!type_eq(expr_type, void_type)) {
+				fprintf(ctx->out_file, "    %%result =");
+				qbe_write_type(ctx, qbe_type_from_type(expr_type));
+				fprintf(ctx->out_file, "copy ");
+				qbe_write_var(ctx, ctx->result_var);
+				fprintf(ctx->out_file, "\n");
 			}
-
-			fprintf(ctx->out_file, "    ret ");
-			qbe_write_var(ctx, ctx->result_var);
-			fprintf(ctx->out_file, "\n");
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			fprintf(ctx->out_file, "    jmp @end\n");
 		} break;
 		case NODE_CAST: {
 			if (!analyze_node(ctx, symbol_maps, node->as.cast.expr_ref, false)) {
@@ -550,10 +576,108 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type.pointer_depth--;
 		} break;
 		case NODE_NEQ: {
-			todo("Implement NEQ analysis");  // LEFTOFF
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false)) {
+				return false;
+			}
+			qbe_var_t left_var = ctx->result_var;
+			type_t left_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+				return false;
+			}
+			qbe_var_t right_var = ctx->result_var;
+			type_t right_type = ctx->result_type;
+
+			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
+			if (!type_eq(left_type, right_type)) {
+				todo("Type mismatch in NEQ operation");
+			}
+
+			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "cne");
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_var(ctx, left_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, right_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = int_type;
+		} break;
+		case NODE_IF: {
+			if (!analyze_node(ctx, symbol_maps, node->as.if_.expr_ref, false)) {
+				return false;
+			}
+			qbe_var_t cond_var = ctx->result_var;
+
+			qbe_label_t then_label = ctx_new_label(ctx);
+			qbe_label_t end_label = ctx_new_label(ctx);
+
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			fprintf(ctx->out_file, "    jnz ");
+			qbe_write_var(ctx, cond_var);
+			fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, end_label.label_num);  // TODO: Create some qbe_write_label function
+			fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
+			if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
+				return false;
+			}
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", end_label.label_num);
+			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
+		} break;
+		case NODE_FILE: {
+			for (size_t i = 0; i < node->as.file.top_levels.length; i++) {
+				node_ref_t *child_ref = list_at(&node->as.file.top_levels, node_ref_t, i);
+				if (!analyze_node(ctx, symbol_maps, *child_ref, false)) {
+					return false;
+				}
+			}
+		} break;
+		case NODE_CALL: {
+			// Analyze arguments
+			list_t arg_vars = { .element_size = sizeof(qbe_var_t) };
+			list_t arg_types = { .element_size = sizeof(type_t) };
+			for (size_t i = 0; i < node->as.call.arg_refs.length; i++) {
+				node_ref_t *arg_ref = list_at(&node->as.call.arg_refs, node_ref_t, i);
+				if (!analyze_node(ctx, symbol_maps, *arg_ref, false)) {
+					return false;
+				}
+				list_push(&arg_vars, &ctx->result_var);
+				list_push(&arg_types, &ctx->result_type);
+			}
+
+			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, false)) {
+				return false;
+			}
+			qbe_var_t function_var = ctx->result_var;
+			// type_t function_type = ctx->result_type;
+
+			// TODO: Ensure function_var is actually a function, get its signature, ensure argument types match
+			type_t return_type = int_type;  // TODO: Get from actual signature
+			qbe_value_type_t return_qbe_type = qbe_type_from_type(return_type);
+			qbe_var_t result_var = ctx_new_temp(ctx, return_qbe_type);
+
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, return_qbe_type);
+			fprintf(ctx->out_file, "call ");;
+			qbe_write_var(ctx, function_var);
+			fprintf(ctx->out_file, "(");
+			for (size_t i = 0; i < arg_vars.length; i++) {
+				if (i > 0) {
+					fprintf(ctx->out_file, ", ");
+				}
+				qbe_var_t *arg_var = list_at(&arg_vars, qbe_var_t, i);
+				qbe_write_type(ctx, arg_var->value_type);
+				qbe_write_var(ctx, *arg_var);
+			}
+			fprintf(ctx->out_file, ")\n");
 		} break;
 		default:
-			printf("Unhandled node type in analyze_node: %d\n", node->type);
 			todo("Unhandled node type in analyze_node");
 	}
 

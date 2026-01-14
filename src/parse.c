@@ -106,6 +106,64 @@ void node_print(node_ref_t ref) {
     }
 }
 
+static char *next_token_display(parse_ctx_t *ctx) {
+    if (ctx->token_view->length == 0) {
+        return "EOF";
+    } else {
+        token_t *token = lv_at(ctx->token_view, token_t, 0);
+        static char buffer[64];
+        switch (token->type) {
+            case TOKEN_INTLIT:
+                snprintf(buffer, sizeof(buffer), "%d", token->as.intlit);
+                return buffer;
+            case TOKEN_IDENTIFIER:
+                snprintf(buffer, sizeof(buffer), "%s", token->as.identifier);
+                return buffer;
+            case TOKEN_AMPERSAND:
+                return "&";
+            case TOKEN_STAR:
+                return "*";
+            case TOKEN_LPAREN:
+                return "(";
+            case TOKEN_RPAREN:
+                return ")";
+            case TOKEN_PLUS:
+                return "+";
+            case TOKEN_MINUS:
+                return "-";
+            case TOKEN_SEMICOLON:
+                return ";";
+            case TOKEN_EQ:
+                return "=";
+            case TOKEN_COMMA:
+                return ",";
+            case TOKEN_INT:
+                return "int";
+            case TOKEN_FLOAT:
+                return "float";
+            case TOKEN_CHAR:
+                return "char";
+            case TOKEN_VOID:
+                return "void";
+            case TOKEN_RETURN:
+                return "return";
+            case TOKEN_IF:
+                return "if";
+            case TOKEN_NEQ:
+                return "!=";
+            case TOKEN_LBRACE:
+                return "{";
+            case TOKEN_RBRACE:
+                return "}";
+            case TOKEN_SLASH:
+                return "/";
+            default:
+                snprintf(buffer, sizeof(buffer), "TOKEN(%d)", token->type);
+                return buffer;
+        }
+    }
+}
+
 static bool try_consume_stmt(parse_ctx_t *ctx);
 static bool try_consume_block(parse_ctx_t *ctx);
 
@@ -127,9 +185,11 @@ static bool try_consume_token(parse_ctx_t *ctx, token_type_t expected_type, toke
 }
 
 static bool try_consume_type(parse_ctx_t *ctx) {
+    trace("+ try_consume_type\n");
     parse_ctx_t new_ctx = *ctx;
 
     if (new_ctx.token_view->length == 0) {
+        trace("- try_consume_type: false\n");
         return false;
     }
     
@@ -146,6 +206,7 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     } else if (token->type == TOKEN_CHAR) {
         type_node.type = NODE_CHAR;
     } else {
+        trace("- try_consume_type: false\n");
         return false;
     }
 
@@ -167,15 +228,17 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     }
 
     *ctx = new_ctx;
-    trace("try_consume_type succeeded\n");
+    trace("- try_consume_type: true\n");
     return true;
 }
 
 static bool try_consume_lhs(parse_ctx_t *ctx) {
+    trace("+ try_consume_lhs\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *identifier_token;
     if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &identifier_token)) {
+        trace("- try_consume_lhs: false\n");
         return false;
     }
 
@@ -186,15 +249,17 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &var_node);
 
-    trace("try_consume_lhs succeeded\n");
+    trace("- try_consume_lhs: true\n");
     return true;
 }
 
 static bool try_consume_intlit(parse_ctx_t *ctx) {
+    trace("+ try_consume_intlit\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *intlit_token;
     if (!try_consume_token(&new_ctx, TOKEN_INTLIT, &intlit_token)) {
+        trace("- try_consume_intlit: false\n");
         return false;
     }
 
@@ -205,7 +270,7 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &node);
 
-    trace("try_consume_intlit succeeded\n");
+    trace("- try_consume_intlit: true\n");
     return true;
 }
 
@@ -213,16 +278,20 @@ static bool try_consume_expr_0(parse_ctx_t *ctx);
 static bool try_consume_expr_2(parse_ctx_t *ctx);
 
 static bool try_consume_parens(parse_ctx_t *ctx) {
+    trace("+ try_consume_parens\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *lpar_token;
     if (!try_consume_token(&new_ctx, TOKEN_LPAREN, &lpar_token)) {
+        trace("- try_consume_parens: false\n");
         return false;
     }
     if (!try_consume_expr_0(&new_ctx)) {
+        trace("- try_consume_parens: false\n");
         return false;
     }
     if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        trace("- try_consume_parens: false\n");
         return false;
     }
 
@@ -230,28 +299,85 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
     expr_node->source_loc = lpar_token->source_loc;
     ctx_update(ctx, &new_ctx, expr_node);
 
-    trace("try_consume_parens succeeded\n");
+    trace("- try_consume_parens: true\n");
     return true;
 }
 
+static bool try_consume_call(parse_ctx_t *ctx) {
+    printf("next token: %s\n", next_token_display(ctx));
+
+    trace("+ try_consume_call\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        list_t arg_refs = { .element_size = sizeof(node_ref_t) };
+        while (true) {
+            if (try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+                break;
+            }
+            if (arg_refs.length > 0) {
+                if (!try_consume_token(&new_ctx, TOKEN_COMMA, NULL)) {
+                    trace("- try_consume_call: false\n");
+                    return false;
+                }
+            }
+            if (!try_consume_expr_0(&new_ctx)) {
+                trace("- try_consume_call: false\n");
+                return false;
+            }
+            node_ref_t arg_ref = ctx_get_result_ref(&new_ctx);
+            list_push(&arg_refs, &arg_ref);
+        }
+
+        node_t call_node = {
+            .type = NODE_CALL,
+            .source_loc = source_loc,
+            .as.call = {
+                .function_ref = left_ref,
+                .arg_refs = arg_refs,
+            }
+        };
+        ctx_update(ctx, &new_ctx, &call_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("- try_consume_call: true\n");
+    } else {
+        trace("- try_consume_call: false\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_cast(parse_ctx_t *ctx) {
+    trace("+ try_consume_cast\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *lpar_token;
     if (!try_consume_token(&new_ctx, TOKEN_LPAREN, &lpar_token)) {
+        trace("- try_consume_cast: false\n");
         return false;
     }
 
     if (!try_consume_type(&new_ctx)) {
+        trace("- try_consume_cast: false\n");
         return false;
     }
     node_ref_t target_type_ref = ctx_get_result_ref(&new_ctx);
 
     if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        trace("- try_consume_cast: false\n");
         return false;
     }
 
     if (!try_consume_expr_2(&new_ctx)) {
+        trace("- try_consume_cast: false\n");
         return false;
     }
     node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
@@ -264,19 +390,22 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &cast_node);
 
-    trace("try_consume_cast succeeded\n");
+    trace("- try_consume_cast: true\n");
     return true;
 }
 
 static bool try_consume_address_of(parse_ctx_t *ctx) {
+    trace("+ try_consume_address_of\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *amp_token;
     if (!try_consume_token(&new_ctx, TOKEN_AMPERSAND, &amp_token)) {
+        trace("- try_consume_address_of: false\n");
         return false;
     }
 
     if (!try_consume_lhs(&new_ctx)) {
+        trace("- try_consume_address_of: false\n");
         return false;
     }
     node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
@@ -288,19 +417,22 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &ptr_node);
 
-    trace("try_consume_address_of succeeded\n");
+    trace("- try_consume_address_of: true\n");
     return true;
 }
 
 static bool try_consume_deref(parse_ctx_t *ctx) {
+    trace("+ try_consume_deref\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *star_token;
     if (!try_consume_token(&new_ctx, TOKEN_STAR, &star_token)) {
+        trace("- try_consume_deref: false\n");
         return false;
     }
 
     if (!try_consume_lhs(&new_ctx)) {
+        trace("- try_consume_deref: false\n");
         return false;
     }
     node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
@@ -312,20 +444,22 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &deref_node);
 
-    trace("try_consume_deref succeeded\n");
+    trace("- try_consume_deref: true\n");
     return true;
 }
 
 static bool try_consume_expr_2(parse_ctx_t *ctx) {
-    return try_consume_intlit(ctx)
+    trace("| try_consume_expr_2\n");
+    return try_consume_deref(ctx)
+        || try_consume_address_of(ctx)
         || try_consume_cast(ctx)
         || try_consume_parens(ctx)
         || try_consume_lhs(ctx)
-        || try_consume_address_of(ctx)
-        || try_consume_deref(ctx);
+        || try_consume_intlit(ctx);
 }
 
 static bool try_consume_mult(parse_ctx_t *ctx) {
+    trace("+ try_consume_mult\n");
     parse_ctx_t new_ctx = *ctx;
 
     bool parsed = false;
@@ -336,6 +470,7 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
         if (!try_consume_expr_2(&new_ctx)) {
+            trace("- try_consume_mult: false\n");
             return false;
         }
         node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
@@ -353,12 +488,15 @@ static bool try_consume_mult(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        trace("try_consume_mult succeeded\n");
+        trace("- try_consume_mult: true\n");
+    } else {
+        trace("- try_consume_mult: false\n");
     }
     return parsed;
 }
 
 static bool try_consume_div(parse_ctx_t *ctx) {
+    trace("+ try_consume_div\n");
     parse_ctx_t new_ctx = *ctx;
 
     bool parsed = false;
@@ -369,6 +507,7 @@ static bool try_consume_div(parse_ctx_t *ctx) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
         if (!try_consume_expr_2(&new_ctx)) {
+            trace("- try_consume_div: false\n");
             return false;
         }
         node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
@@ -386,12 +525,15 @@ static bool try_consume_div(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        trace("try_consume_div succeeded\n");
+        trace("- try_consume_div: true\n");
+    } else {
+        trace("- try_consume_div: false\n");
     }
     return parsed;
 }
 
 static bool try_consume_expr_1(parse_ctx_t *ctx) {
+    trace("| try_consume_expr_1\n");
     parse_ctx_t new_ctx = *ctx;
 
     if (!try_consume_expr_2(&new_ctx)) {
@@ -399,6 +541,9 @@ static bool try_consume_expr_1(parse_ctx_t *ctx) {
     }
 
     while (new_ctx.token_view->length > 0) {
+        if (try_consume_call(&new_ctx)) {
+            continue;
+        }
         if (try_consume_mult(&new_ctx)) {
             continue;
         }
@@ -408,11 +553,11 @@ static bool try_consume_expr_1(parse_ctx_t *ctx) {
         break;
     }
 
-    trace("try_consume_expr_1 succeeded\n");
     return true;
 }
 
 static bool try_consume_add(parse_ctx_t *ctx) {
+    trace("+ try_consume_add\n");
     parse_ctx_t new_ctx = *ctx;
 
     bool parsed = false;
@@ -423,6 +568,7 @@ static bool try_consume_add(parse_ctx_t *ctx) {
         left_ref = ctx_get_result_ref(&new_ctx);
 
         if (!try_consume_expr_1(&new_ctx)) {
+            trace("- try_consume_add: false\n");
             return false;
         }
         node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
@@ -440,7 +586,9 @@ static bool try_consume_add(parse_ctx_t *ctx) {
     }
 
     if (parsed) {
-        trace("try_consume_add succeeded\n");
+        trace("- try_consume_add: true\n");
+    } else {
+        trace("- try_consume_add: false\n");
     }
     return parsed;
 }
@@ -812,6 +960,31 @@ bool try_consume_function(parse_ctx_t *ctx) {
     return false;
 }
 
+bool try_consume_top_level(parse_ctx_t *ctx) {
+    return try_consume_function(ctx);
+}
+
+bool try_consume_file(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    list_t top_levels = { .element_size = sizeof(node_ref_t) };
+    while (true) {
+        if (!try_consume_top_level(&new_ctx)) {
+            break;
+        }
+        node_ref_t top_level_ref = ctx_get_result_ref(&new_ctx);
+        list_push(&top_levels, &top_level_ref);
+    }
+
+    node_t file_node = {
+        .type = NODE_FILE,
+        .as.file.top_levels = top_levels,
+    };
+    ctx_update(ctx, &new_ctx, &file_node);
+
+    return true;
+}
+
 bool parse(list_t *nodes, list_t *tokens, node_ref_t *root_ref) {
     lv_t token_view = lv_from_list(tokens);
     root_ref->nodes = nodes;
@@ -821,5 +994,13 @@ bool parse(list_t *nodes, list_t *tokens, node_ref_t *root_ref) {
         .result_index = &root_ref->index,
     };
 
-    return try_consume_function(&ctx);
+    if (!try_consume_file(&ctx)) {
+        return false;
+    }
+
+    if (ctx.token_view->length != 0) {
+        return false;
+    }
+
+    return true;
 }
