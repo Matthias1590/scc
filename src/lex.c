@@ -84,6 +84,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_LONG;
     } else if (strcmp(buffer, "if") == 0) {
         token.type = TOKEN_IF;
+    } else if (strcmp(buffer, "else") == 0) {
+        token.type = TOKEN_ELSE;
     } else {
         strcpy(token.as.identifier, buffer);
     }
@@ -115,7 +117,12 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
     } else if (ctx->code_view->string[0] == '}') {
         token.type = TOKEN_RBRACE;
     } else if (ctx->code_view->string[0] == '=') {
-        token.type = TOKEN_EQ;
+        if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '=') {
+            token.type = TOKEN_EQEQ;
+            sv_consume(ctx->code_view, 1); // consume extra '='
+        } else {
+            token.type = TOKEN_EQ;
+        }
     } else if (ctx->code_view->string[0] == '&') {
         token.type = TOKEN_AMPERSAND;
     } else if (ctx->code_view->string[0] == ',') {

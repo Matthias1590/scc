@@ -630,17 +630,38 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_label_t then_label = ctx_new_label(ctx);
 			qbe_label_t end_label = ctx_new_label(ctx);
 
-			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
-			fprintf(ctx->out_file, "    jnz ");
-			qbe_write_var(ctx, cond_var);
-			fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, end_label.label_num);  // TODO: Create some qbe_write_label function
-			fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
-			if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
-				return false;
+			// TODO: Clean this up
+			if (node_ref_is_null(node->as.if_.else_ref)) {
+				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+				fprintf(ctx->out_file, "    jnz ");
+				qbe_write_var(ctx, cond_var);
+				fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, end_label.label_num);  // TODO: Create some qbe_write_label function
+				fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
+					return false;
+				}
+				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+				fprintf(ctx->out_file, "    jmp @label_%zu\n", end_label.label_num);
+				fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
+			} else {
+				qbe_label_t else_label = ctx_new_label(ctx);
+
+				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+				fprintf(ctx->out_file, "    jnz ");
+				qbe_write_var(ctx, cond_var);
+				fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, else_label.label_num);  // TODO: Create some qbe_write_label function
+				fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
+					return false;
+				}
+				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+				fprintf(ctx->out_file, "    jmp @label_%zu\n", end_label.label_num);
+				fprintf(ctx->out_file, "@label_%zu\n", else_label.label_num);
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.else_ref, false)) {
+					return false;
+				}
+				fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
 			}
-			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
-			fprintf(ctx->out_file, "    jmp @label_%zu\n", end_label.label_num);
-			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
 		} break;
 		case NODE_FILE: {
 			for (size_t i = 0; i < node->as.file.top_levels.length; i++) {
@@ -693,6 +714,38 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			ctx->result_var = result_var;
 			ctx->result_type = return_type;
+		} break;
+		case NODE_EQEQ: {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false)) {
+				return false;
+			}
+			qbe_var_t left_var = ctx->result_var;
+			type_t left_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+				return false;
+			}
+			qbe_var_t right_var = ctx->result_var;
+			type_t right_type = ctx->result_type;
+
+			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
+			if (!type_eq(left_type, right_type)) {
+				todo("Type mismatch in EQEQ operation");
+			}
+
+			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "ceq");
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_var(ctx, left_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, right_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = int_type;
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");

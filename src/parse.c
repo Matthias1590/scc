@@ -450,8 +450,8 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
     return true;
 }
 
-static bool try_consume_expr_2(parse_ctx_t *ctx) {
-    trace("| try_consume_expr_2\n");
+static bool try_consume_expr_3(parse_ctx_t *ctx) {
+    trace("| try_consume_expr_3\n");
     return try_consume_deref(ctx)
         || try_consume_address_of(ctx)
         || try_consume_cast(ctx)
@@ -459,6 +459,26 @@ static bool try_consume_expr_2(parse_ctx_t *ctx) {
         || try_consume_lhs(ctx)
         || try_consume_intlit(ctx);
 }
+
+
+static bool try_consume_expr_2(parse_ctx_t *ctx) {
+    trace("| try_consume_expr_2\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_expr_3(&new_ctx)) {
+        return false;
+    }
+
+    while (new_ctx.token_view->length > 0) {
+        if (try_consume_call(&new_ctx)) {
+            continue;
+        }
+        break;
+    }
+
+    return true;
+}
+
 
 static bool try_consume_mult(parse_ctx_t *ctx) {
     trace("+ try_consume_mult\n");
@@ -543,9 +563,6 @@ static bool try_consume_expr_1(parse_ctx_t *ctx) {
     }
 
     while (new_ctx.token_view->length > 0) {
-        if (try_consume_call(&new_ctx)) {
-            continue;
-        }
         if (try_consume_mult(&new_ctx)) {
             continue;
         }
@@ -661,6 +678,39 @@ static bool try_consume_neq(parse_ctx_t *ctx) {
     return parsed;
 }
 
+static bool try_consume_eqeq(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_EQEQ, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t eqeq_node = {
+            .type = NODE_EQEQ,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &eqeq_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_eqeq succeeded\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_expr_0(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -676,6 +726,9 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
             continue;
         }
         if (try_consume_neq(&new_ctx)) {  // TODO: Im pretty sure this operator precedence is wrong
+            continue;
+        }
+        if (try_consume_eqeq(&new_ctx)) {
             continue;
         }
         break;
@@ -785,6 +838,13 @@ static bool try_consume_if(parse_ctx_t *ctx) {
         return false;
     }
     if_node.as.if_.then_ref = ctx_get_result_ref(&new_ctx);
+
+    if (try_consume_token(&new_ctx, TOKEN_ELSE, NULL)) {
+        if (!try_consume_stmt(&new_ctx)) {
+            return false;
+        }
+        if_node.as.if_.else_ref = ctx_get_result_ref(&new_ctx);
+    }
 
     ctx_update(ctx, &new_ctx, &if_node);
     return true;

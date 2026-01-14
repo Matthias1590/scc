@@ -24,7 +24,9 @@ typedef enum {
     TOKEN_VOID,
     TOKEN_RETURN,
     TOKEN_IF,
+    TOKEN_ELSE,
     TOKEN_NEQ,
+    TOKEN_EQEQ,
 } token_type_t;
 
 typedef struct {
