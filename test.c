@@ -1,8 +1,14 @@
+int factrec(int x);
+
 int fact(int x) {
+    return factrec(x);
+}
+
+int factrec(int x) {
     if (x == 0) {
         return 1;
     } else {
-        return x * fact(x - 1);
+        return x * factrec(x - 1);
     }
 }
 

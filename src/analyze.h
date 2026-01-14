@@ -4,6 +4,7 @@
 
 typedef struct {
 	bool global;
+	bool is_forward_decl;
 	token_t *name;
 	node_ref_t type_ref;
 } symbol_t;

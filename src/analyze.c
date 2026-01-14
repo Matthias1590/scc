@@ -421,11 +421,35 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->function_return_type = type_from_node(return_type_node);
 
 			assert(is_global_map(symbol_maps) && "Functions can only be declared in the global scope");
-			add_symbol(symbol_maps, (symbol_t) {
-				.name = signature_node->as.function_signature.name,
-				.type_ref = node->as.function.signature_ref,
-				.global = true,
-			});
+
+			bool is_forward_decl = node_ref_is_null(node->as.function.body_ref);
+			if (is_forward_decl) {
+				add_symbol(symbol_maps, (symbol_t) {
+					.name = signature_node->as.function_signature.name,
+					.type_ref = node->as.function.signature_ref,
+					.global = true,
+					.is_forward_decl = true,
+				});
+			} else {
+				symbol_t *existing_symbol = find_symbol_recursive(symbol_maps, sv_from_cstr(signature_node->as.function_signature.name->as.identifier));
+				if (existing_symbol != NULL) {
+					if (!existing_symbol->is_forward_decl) {
+						todo("Report redeclaration error for function");
+					}
+				} else {
+					add_symbol(symbol_maps, (symbol_t) {
+						.name = signature_node->as.function_signature.name,
+						.type_ref = node->as.function.signature_ref,
+						.global = true,
+						.is_forward_decl = false,
+					});
+				}
+			}
+
+			if (is_forward_decl) {
+				// Declaration only
+				return true;
+			}
 
 			fprintf(ctx->out_file, "export function ");
 			qbe_write_type(ctx, qbe_type_from_type(ctx->function_return_type));
