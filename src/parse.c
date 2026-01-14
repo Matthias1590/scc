@@ -205,6 +205,8 @@ static bool try_consume_type(parse_ctx_t *ctx) {
         type_node.type = NODE_VOID;
     } else if (token->type == TOKEN_CHAR) {
         type_node.type = NODE_CHAR;
+    } else if (token->type == TOKEN_LONG) {
+        type_node.type = NODE_LONG;
     } else {
         trace("- try_consume_type: false\n");
         return false;

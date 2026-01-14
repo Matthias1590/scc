@@ -80,6 +80,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_RETURN;
     } else if (strcmp(buffer, "char") == 0) {
         token.type = TOKEN_CHAR;
+    } else if (strcmp(buffer, "long") == 0) {
+        token.type = TOKEN_LONG;
     } else if (strcmp(buffer, "if") == 0) {
         token.type = TOKEN_IF;
     } else {

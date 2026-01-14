@@ -62,6 +62,7 @@ typedef enum {
 	QBE_VAR_IDENTIFIER,
 	QBE_VAR_TEMP,
 	QBE_VAR_PARAM,
+	QBE_VAR_FUNC,
 } qbe_var_type_t;
 
 typedef enum {
@@ -148,6 +149,10 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 		case QBE_VAR_PARAM:
 			assert(!var.global);
 			fprintf(ctx->out_file, "param_%s", var.as.identifier);
+			break;
+		case QBE_VAR_FUNC:
+			assert(var.global);
+			fprintf(ctx->out_file, "%s", var.as.identifier);
 			break;
 	}
 }
@@ -256,6 +261,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			add_symbol(symbol_maps, (symbol_t) {
 				.name = node->as.var_decl.name,
 				.type_ref = node->as.var_decl.type_ref,
+				.global = is_global_map(symbol_maps),
 			});
 			type_t type = type_from_node(node_ref_get(node->as.var_decl.type_ref));
 			qbe_var_t var = (qbe_var_t) {
@@ -377,8 +383,13 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 
 			type_t type = type_from_node(node_ref_get(symbol->type_ref));
+			if (type.kind == TYPE_FUNC) {
+				// assert(emit_lvalue && "Cannot emit non-lvalue for function identifiers");
+				emit_lvalue = true;
+			}
+
 			qbe_var_t var = (qbe_var_t) {
-				.global = is_global_map(symbol_maps),
+				.global = symbol->global,
 				.var_type = QBE_VAR_IDENTIFIER,
 				.value_type = qbe_type_from_type(type),
 				.as.identifier = symbol->name->as.identifier,
@@ -409,16 +420,18 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			node_t *return_type_node = node_ref_get(signature_node->as.function_signature.return_type_ref);
 			ctx->function_return_type = type_from_node(return_type_node);
 
+			assert(is_global_map(symbol_maps) && "Functions can only be declared in the global scope");
 			add_symbol(symbol_maps, (symbol_t) {
 				.name = signature_node->as.function_signature.name,
 				.type_ref = node->as.function.signature_ref,
+				.global = true,
 			});
 
 			fprintf(ctx->out_file, "export function ");
 			qbe_write_type(ctx, qbe_type_from_type(ctx->function_return_type));
 			qbe_write_var(ctx, (qbe_var_t) {
 				.global = true,
-				.var_type = QBE_VAR_IDENTIFIER,
+				.var_type = QBE_VAR_FUNC,
 				.as.identifier = signature_node->as.function_signature.name->as.identifier,
 			});
 
@@ -443,6 +456,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				add_symbol(symbol_maps, (symbol_t) {
 					.name = param_node->as.var_decl.name,
 					.type_ref = param_node->as.var_decl.type_ref,
+					.global = false,
 				});
 			}
 			fprintf(ctx->out_file, ")\n{\n");
@@ -649,7 +663,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				list_push(&arg_types, &ctx->result_type);
 			}
 
-			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, true)) {
 				return false;
 			}
 			qbe_var_t function_var = ctx->result_var;
@@ -676,6 +690,9 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				qbe_write_var(ctx, *arg_var);
 			}
 			fprintf(ctx->out_file, ")\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = return_type;
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");

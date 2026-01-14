@@ -14,6 +14,7 @@ typedef enum {
     TOKEN_INT,
     TOKEN_FLOAT,
     TOKEN_CHAR,
+    TOKEN_LONG,
     TOKEN_SEMICOLON,
     TOKEN_LBRACE,
     TOKEN_RBRACE,
