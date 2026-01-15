@@ -91,12 +91,18 @@ typedef struct {
 } qbe_label_t;
 
 typedef struct {
+	unsigned char *data;
+	size_t size;
+} readonly_value_t;
+
+typedef struct {
 	FILE *out_file;
 	qbe_var_t result_var;
 	type_t result_type;
 	type_t function_return_type;
 	size_t next_label;
 	size_t next_temp;
+	list_t readonly_values;
 } codegen_ctx_t;
 
 static qbe_var_t ctx_new_temp(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
@@ -107,6 +113,24 @@ static qbe_var_t ctx_new_temp(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
 		.as.temp = ctx->next_temp++,
 	};
 	return temp_var;
+}
+
+static qbe_var_t ctx_add_data(codegen_ctx_t *ctx, const void *data, size_t data_size) {
+	readonly_value_t readonly_value = {
+		.data = malloc(data_size),
+		.size = data_size,
+	};
+	memcpy(readonly_value.data, data, data_size);
+	list_push(&ctx->readonly_values, &readonly_value);
+
+	qbe_var_t data_var = {
+		.global = true,
+		.var_type = QBE_VAR_IDENTIFIER,
+		.value_type = QBE_VALUE_LONG,
+		.as.identifier = malloc(32),
+	};
+	sprintf(data_var.as.identifier, PRIVATE_PREFIX"data_%zu", ctx->readonly_values.length - 1);
+	return data_var;
 }
 
 static qbe_label_t ctx_new_label(codegen_ctx_t *ctx) {
@@ -783,6 +807,18 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_var = ctx_null_var;
 			ctx->result_type = void_type;
 		} break;
+		case NODE_STRINGLIT: {
+			// node->as.stringlit.as.stringlit.length
+			char str[node->as.stringlit.as.stringlit.length + 1];
+			sv_to_cstr(node->as.stringlit.as.stringlit, str, sizeof(str));
+			
+			// data $fmt = { b "One and one make %d!\n", b 0 }
+			ctx->result_var = ctx_add_data(ctx, str, strlen(str) + 1);
+			ctx->result_type = (type_t) {
+				.kind = TYPE_CHAR,
+				.pointer_depth = 1,
+			};
+		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
 	}
@@ -798,12 +834,27 @@ bool analyze(node_ref_t root_ref, const char *out_path) {
 
 	codegen_ctx_t ctx = {
 		.out_file = out_file,
+		.readonly_values = { .element_size = sizeof(readonly_value_t) },
 	};
 
 	list_t symbol_maps = { .element_size = sizeof(list_t) };
 	push_map(&symbol_maps);
 
 	bool success = analyze_node(&ctx, &symbol_maps, root_ref, false);
+
+	// Write readonly data
+	for (size_t i = 0; i < ctx.readonly_values.length; i++) {
+		readonly_value_t *readonly_value = list_at(&ctx.readonly_values, readonly_value_t, i);
+		fprintf(out_file, "data ");
+		fprintf(out_file, "$"PRIVATE_PREFIX"data_%zu = { ", i);
+		for (size_t j = 0; j < readonly_value->size; j++) {
+			if (j > 0) {
+				fprintf(out_file, ", ");
+			}
+			fprintf(out_file, "b %u", readonly_value->data[j]);
+		}
+		fprintf(out_file, " }\n");
+	}
 
 	fclose(out_file);
 	return success;

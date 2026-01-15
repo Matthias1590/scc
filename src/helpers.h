@@ -6,6 +6,8 @@
     #define trace(...)
 #endif
 
+#define PRIVATE_PREFIX "__scc__"
+
 #define unused(x) (void)(x)
 
 #define assert(expr) \

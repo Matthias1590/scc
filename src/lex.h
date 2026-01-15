@@ -42,6 +42,7 @@ typedef struct {
     union {
         int intlit;
         char identifier[32];
+        sv_t stringlit;
     } as;
 } token_t;
 

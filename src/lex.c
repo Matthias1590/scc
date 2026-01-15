@@ -36,6 +36,7 @@ static bool try_consume_intlit(lex_ctx_t *ctx) {
 
     sv_t intlit_sv = sv_consume(ctx->code_view, i);
 
+    // TODO: Use sv_t?
     char buffer[32];
     if (intlit_sv.length >= sizeof(buffer)) {
         report_error(start_loc, "Integer literal too long");
@@ -44,6 +45,32 @@ static bool try_consume_intlit(lex_ctx_t *ctx) {
     sv_to_cstr(intlit_sv, buffer, sizeof(buffer));
 
     token_t token = { .type = TOKEN_INTLIT, .source_loc = start_loc, .as.intlit = atoi(buffer) };
+    list_push(ctx->tokens, &token);
+
+    return true;
+}
+
+static bool try_consume_stringlit(lex_ctx_t *ctx) {
+    source_loc_t start_loc = ctx_get_source_loc(ctx);
+
+    if (ctx->code_view->length == 0 || ctx->code_view->string[0] != '"') {
+        return false;
+    }
+
+    size_t i = 1;
+    while (i < ctx->code_view->length && ctx->code_view->string[i] != '"') {
+        i++;
+    }
+    if (i >= ctx->code_view->length) {
+        report_error(start_loc, "Unterminated string literal");
+    }
+    i--;
+    
+    sv_consume(ctx->code_view, 1); // consume opening quote
+    sv_t string_sv = sv_consume(ctx->code_view, i); // exclude closing quote
+    sv_consume(ctx->code_view, 1); // consume closing quote
+
+    token_t token = { .type = TOKEN_STRINGLIT, .source_loc = start_loc, .as.stringlit = string_sv };
     list_push(ctx->tokens, &token);
 
     return true;
@@ -162,6 +189,8 @@ bool tokenize(list_t *tokens, sv_t code_view, const char *file_name) {
 
         if (try_consume_intlit(&ctx)) {
             continue;
+        } else if (try_consume_stringlit(&ctx)) {
+            continue;
         } else if (try_consume_symbol(&ctx)) {
             continue;
         } else if (try_consume_identifier(&ctx)) {
@@ -236,6 +265,12 @@ void token_print(const token_t *token) {
             break;
         case TOKEN_IF:
             printf("IF");
+            break;
+        case TOKEN_STRINGLIT:
+            printf("STRINGLIT(\"%.*s\")", (int)token->as.stringlit.length, token->as.stringlit.string);
+            break;
+        case TOKEN_LONG:
+            printf("LONG");
             break;
         default:
             unreachable();
