@@ -44,7 +44,8 @@ Codegen:
 
 ---
 
-[ ] If statements
+[*] If statements
+[*] Forward declaration
 [ ] While loops
-[ ] Forward declaration
+[ ] Implicit casting
 This is to get a hello world working.
