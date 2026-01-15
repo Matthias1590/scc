@@ -477,6 +477,9 @@ static bool try_consume_expr_2(parse_ctx_t *ctx) {
     return true;
 }
 
+// TODO: All this new_ctx stuff can be abstracted
+// TODO: All this binop parsing can be abstracted
+// TODO: Come up with a way to handle precedence with some sort of map or something, not this expr_1, expr_0, expr_3, etc. mess...
 static bool try_consume_mult(parse_ctx_t *ctx) {
     trace("+ try_consume_mult\n");
     parse_ctx_t new_ctx = *ctx;
