@@ -2,7 +2,7 @@
 
 typedef struct {
     list_t *nodes;
-    lv_t *token_view;
+    lv_t token_view;
     size_t *result_index;
 } parse_ctx_t;
 
@@ -18,6 +18,7 @@ static void ctx_update(parse_ctx_t *ctx, parse_ctx_t *new_ctx, node_t *node) {
     list_push(new_ctx->nodes, node);
     *new_ctx->result_index = new_ctx->nodes->length - 1;
     *ctx = *new_ctx;
+    ctx->token_view = new_ctx->token_view;
 }
 
 node_t *node_ref_get(node_ref_t ref) {
@@ -107,10 +108,10 @@ void node_print(node_ref_t ref) {
 }
 
 static char *next_token_display(parse_ctx_t *ctx) {
-    if (ctx->token_view->length == 0) {
+    if (ctx->token_view.length == 0) {
         return "EOF";
     } else {
-        token_t *token = lv_at(ctx->token_view, token_t, 0);
+        token_t *token = lv_at(&ctx->token_view, token_t, 0);
         static char buffer[64];
         switch (token->type) {
             case TOKEN_INTLIT:
@@ -168,19 +169,19 @@ static bool try_consume_stmt(parse_ctx_t *ctx);
 static bool try_consume_block(parse_ctx_t *ctx);
 
 static bool try_consume_token(parse_ctx_t *ctx, token_type_t expected_type, token_t **token) {
-    if (ctx->token_view->length == 0) {
+    if (ctx->token_view.length == 0) {
         return false;
     }
-    if (lv_at(ctx->token_view, token_t, 0)->type != expected_type) {
+    if (lv_at(&ctx->token_view, token_t, 0)->type != expected_type) {
         return false;
     }
 
     if (token) {
-        *token = lv_at(ctx->token_view, token_t, 0);
+        *token = lv_at(&ctx->token_view, token_t, 0);
     }
 
-    ctx->token_view->start++;
-    ctx->token_view->length--;
+    ctx->token_view.start++;
+    ctx->token_view.length--;
     return true;
 }
 
@@ -188,14 +189,14 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     trace("+ try_consume_type\n");
     parse_ctx_t new_ctx = *ctx;
 
-    if (new_ctx.token_view->length == 0) {
+    if (new_ctx.token_view.length == 0) {
         trace("- try_consume_type: false\n");
         return false;
     }
     
     node_t type_node;
 
-    token_t *token = lv_at(new_ctx.token_view, token_t, 0);
+    token_t *token = lv_at(&new_ctx.token_view, token_t, 0);
     type_node.source_loc = token->source_loc;
     if (token->type == TOKEN_INT) {
         type_node.type = NODE_INT;
@@ -212,8 +213,8 @@ static bool try_consume_type(parse_ctx_t *ctx) {
         return false;
     }
 
-    new_ctx.token_view->start++;
-    new_ctx.token_view->length--;
+    new_ctx.token_view.start++;
+    new_ctx.token_view.length--;
 
     list_push(new_ctx.nodes, &type_node);
     *new_ctx.result_index = new_ctx.nodes->length - 1;
@@ -235,7 +236,7 @@ static bool try_consume_type(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_lhs(parse_ctx_t *ctx) {
-    debug_var(token_t *, next_token, lv_at(ctx->token_view, token_t, 0));
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
 
     trace("+ try_consume_lhs\n");
     parse_ctx_t new_ctx = *ctx;
@@ -258,6 +259,8 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_intlit(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     trace("+ try_consume_intlit\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -282,6 +285,8 @@ static bool try_consume_expr_0(parse_ctx_t *ctx);
 static bool try_consume_expr_2(parse_ctx_t *ctx);
 
 static bool try_consume_parens(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     trace("+ try_consume_parens\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -360,6 +365,8 @@ static bool try_consume_call(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_cast(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     trace("+ try_consume_cast\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -399,6 +406,8 @@ static bool try_consume_cast(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_address_of(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     trace("+ try_consume_address_of\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -426,6 +435,8 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_deref(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     trace("+ try_consume_deref\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -465,14 +476,13 @@ static bool try_consume_expr_3(parse_ctx_t *ctx) {
 
 static bool try_consume_expr_2(parse_ctx_t *ctx) {
     trace("| try_consume_expr_2\n");
-    parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_expr_3(&new_ctx)) {
+    if (!try_consume_expr_3(ctx)) {
         return false;
     }
 
-    while (new_ctx.token_view->length > 0) {
-        if (try_consume_call(&new_ctx)) {
+    while (ctx->token_view.length > 0) {
+        if (try_consume_call(ctx)) {
             continue;
         }
         break;
@@ -558,17 +568,16 @@ static bool try_consume_div(parse_ctx_t *ctx) {
 
 static bool try_consume_expr_1(parse_ctx_t *ctx) {
     trace("| try_consume_expr_1\n");
-    parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_expr_2(&new_ctx)) {
+    if (!try_consume_expr_2(ctx)) {
         return false;
     }
 
-    while (new_ctx.token_view->length > 0) {
-        if (try_consume_mult(&new_ctx)) {
+    while (ctx->token_view.length > 0) {
+        if (try_consume_mult(ctx)) {
             continue;
         }
-        if (try_consume_div(&new_ctx)) {
+        if (try_consume_div(ctx)) {
             continue;
         }
         break;
@@ -714,23 +723,21 @@ static bool try_consume_eqeq(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_expr_0(parse_ctx_t *ctx) {
-    parse_ctx_t new_ctx = *ctx;
-
-    if (!try_consume_expr_1(&new_ctx)) {
+    if (!try_consume_expr_1(ctx)) {
         return false;
     }
 
-    while (new_ctx.token_view->length > 0) {
-        if (try_consume_add(&new_ctx)) {
+    while (ctx->token_view.length > 0) {
+        if (try_consume_add(ctx)) {
             continue;
         }
-        if (try_consume_sub(&new_ctx)) {
+        if (try_consume_sub(ctx)) {
             continue;
         }
-        if (try_consume_neq(&new_ctx)) {  // TODO: Im pretty sure this operator precedence is wrong
+        if (try_consume_neq(ctx)) {  // TODO: Im pretty sure this operator precedence is wrong
             continue;
         }
-        if (try_consume_eqeq(&new_ctx)) {
+        if (try_consume_eqeq(ctx)) {
             continue;
         }
         break;
@@ -741,6 +748,8 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_var_decl(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
     if (!try_consume_type(&new_ctx)) {
@@ -780,6 +789,8 @@ static bool try_consume_var_decl(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_return(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
     token_t *return_token;
@@ -811,6 +822,8 @@ static bool try_consume_return(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_if(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
     token_t *if_token;
@@ -853,21 +866,30 @@ static bool try_consume_if(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_assignment(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_lhs(ctx)) {
+    if (!try_consume_lhs(&new_ctx)) {
         return false;
     }
     node_ref_t left_ref = ctx_get_result_ref(&new_ctx);
 
+    debug_var(token_t *, after_lhs, lv_at(&new_ctx.token_view, token_t, 0));
+    
     if (!try_consume_token(&new_ctx, TOKEN_EQ, NULL)) {
+        debug_var(token_t *, actual_next, lv_at(&ctx->token_view, token_t, 0));
         return false;
     }
+
+    debug_var(token_t *, after_eq, lv_at(&new_ctx.token_view, token_t, 0));
 
     if (!try_consume_expr_0(&new_ctx)) {
         return false;
     }
     node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+    debug_var(token_t *, after_expr, lv_at(&new_ctx.token_view, token_t, 0));
 
     if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
         return false;
@@ -886,12 +908,16 @@ static bool try_consume_assignment(parse_ctx_t *ctx) {
 
 // LEFTOFF: Was debugging this, current test.c doesn't work
 static bool try_consume_discard(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
     if (!try_consume_expr_0(&new_ctx)) {
         return false;
     }
     node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    debug_var(token_t *, after_expr, lv_at(&new_ctx.token_view, token_t, 0));
 
     if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
         return false;
@@ -907,15 +933,50 @@ static bool try_consume_discard(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_stmt(parse_ctx_t *ctx) {
-    return try_consume_var_decl(ctx)
-        || try_consume_assignment(ctx)
-        || try_consume_return(ctx)
-        || try_consume_if(ctx)
-        || try_consume_block(ctx)
-        || try_consume_discard(ctx);
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
+    if (try_consume_var_decl(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_vardecl, lv_at(&ctx->token_view, token_t, 0));
+
+    if (try_consume_assignment(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_assignment, lv_at(&ctx->token_view, token_t, 0));
+
+    if (try_consume_return(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_return, lv_at(&ctx->token_view, token_t, 0));
+
+    if (try_consume_if(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_if, lv_at(&ctx->token_view, token_t, 0));
+    
+    if (try_consume_block(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_block, lv_at(&ctx->token_view, token_t, 0));
+
+    if (try_consume_discard(ctx)) {
+        return true;
+    }
+
+    debug_var(token_t *, after_discard, lv_at(&ctx->token_view, token_t, 0));
+
+    return false;
 }
 
 static bool try_consume_block(parse_ctx_t *ctx) {
+    debug_var(token_t *, next_token, lv_at(&ctx->token_view, token_t, 0));
+
     parse_ctx_t new_ctx = *ctx;
 
     token_t *start_token;
@@ -1073,11 +1134,10 @@ bool try_consume_file(parse_ctx_t *ctx) {
 }
 
 bool parse(list_t *nodes, list_t *tokens, node_ref_t *root_ref) {
-    lv_t token_view = lv_from_list(tokens);
     root_ref->nodes = nodes;
     parse_ctx_t ctx = {
         .nodes = nodes,
-        .token_view = &token_view,
+        .token_view = lv_from_list(tokens),
         .result_index = &root_ref->index,
     };
 
@@ -1085,7 +1145,7 @@ bool parse(list_t *nodes, list_t *tokens, node_ref_t *root_ref) {
         return false;
     }
 
-    if (ctx.token_view->length != 0) {
+    if (ctx.token_view.length != 0) {
         return false;
     }
 

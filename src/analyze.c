@@ -82,6 +82,10 @@ typedef struct {
 	} as;
 } qbe_var_t;
 
+qbe_var_t ctx_null_var = {
+	.value_type = QBE_VALUE_VOID,
+};
+
 typedef struct {
 	size_t label_num;
 } qbe_label_t;
@@ -770,6 +774,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			ctx->result_var = result_var;
 			ctx->result_type = int_type;
+		} break;
+		case NODE_DISCARD: {
+			if (!analyze_node(ctx, symbol_maps, node->as.discard.expr_ref, false)) {
+				return false;
+			}
+
+			ctx->result_var = ctx_null_var;
+			ctx->result_type = void_type;
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
