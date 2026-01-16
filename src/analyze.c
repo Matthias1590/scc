@@ -8,10 +8,17 @@ typedef enum {
 	TYPE_FUNC,
 } type_kind_t;
 
-typedef struct {
+typedef struct type_t type_t;
+struct type_t {
 	type_kind_t kind;
 	size_t pointer_depth;
-} type_t;
+	union {
+		struct {
+			type_t *return_type;
+			list_t parameter_types;
+		} func;
+	} as;
+};
 
 static type_t int_type = {
 	.kind = TYPE_INT,
@@ -27,10 +34,6 @@ static type_t void_type = {
 };
 static type_t char_type = {
 	.kind = TYPE_CHAR,
-	.pointer_depth = 0,
-};
-static type_t func_type = {
-	.kind = TYPE_FUNC,
 	.pointer_depth = 0,
 };
 
@@ -51,7 +54,24 @@ static type_t type_from_node(node_t *node) {
 		return char_type;
 	}
 	case NODE_FUNCTION_SIGNATURE: {
-		return func_type;
+		type_t return_type = type_from_node(node_ref_get(node->as.function_signature.return_type_ref));
+		list_t parameter_types = { .element_size = sizeof(type_t) };
+		for (size_t i = 0; i < node->as.function_signature.parameters.length; i++) {
+			node_ref_t *param_ref = list_at(&node->as.function_signature.parameters, node_ref_t, i);
+			node_t *param_node = node_ref_get(*param_ref);
+			type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+			list_push(&parameter_types, &param_type);
+		}
+		type_t function_type = {
+			.kind = TYPE_FUNC,
+			.pointer_depth = 0,
+			.as.func = {
+				.return_type = malloc(sizeof(type_t)),
+				.parameter_types = parameter_types,
+			},
+		};
+		*function_type.as.func.return_type = return_type;
+		return function_type;
 	}
 	default:
 		todo("Unhandled type conversion from node to type");
@@ -294,6 +314,20 @@ bool is_global_map(list_t *symbol_maps) {
 
 static bool type_eq(type_t a, type_t b) {
 	return a.kind == b.kind && a.pointer_depth == b.pointer_depth;
+}
+
+static bool type_is_primitive(type_t type) {
+	if (type.pointer_depth > 0) {
+		return true;
+	}
+	switch (type.kind) {
+		case TYPE_INT:
+		case TYPE_LONG:
+		case TYPE_CHAR:
+			return true;
+		default:
+			return false;
+	}
 }
 
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue, size_t scope_depth) {
@@ -581,7 +615,9 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 
 			// Body, we don't increment scope_depth because the block node does that already
-			// TODO: A function body can only be a block
+			if (node_ref_get(node->as.function.body_ref)->type != NODE_BLOCK) {
+				report_error(node->source_loc, "Function body must be a block");
+			}
 			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false, scope_depth)) {
 				return false;
 			}
@@ -691,8 +727,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_var_t right_var = ctx->result_var;
 			type_t right_type = ctx->result_type;
 
-			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
-			if (!type_eq(left_type, right_type)) {
+			if (!type_eq(left_type, right_type) || !type_is_primitive(left_type)) {
 				todo("Type mismatch in NEQ operation");
 			}
 
@@ -780,10 +815,24 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t function_var = ctx->result_var;
-			// type_t function_type = ctx->result_type;
+			type_t function_type = ctx->result_type;
 
-			// TODO: Ensure function_var is actually a function, get its signature, ensure argument types match
-			type_t return_type = int_type;  // TODO: Get from actual signature
+			assert(function_type.kind == TYPE_FUNC && "TODO: Handle this error properly");
+
+			type_t return_type = *function_type.as.func.return_type;
+
+			// Check argument types
+			if (function_type.as.func.parameter_types.length != arg_types.length) {
+				todo("Report function argument count mismatch error");
+			}
+			for (size_t i = 0; i < arg_types.length; i++) {
+				type_t *expected_type = list_at(&function_type.as.func.parameter_types, type_t, i);
+				type_t *actual_type = list_at(&arg_types, type_t, i);
+				if (!type_eq(*expected_type, *actual_type)) {
+					todo("Report function argument type mismatch error");
+				}
+			}
+
 			qbe_value_type_t return_qbe_type = qbe_type_from_type(return_type);
 			qbe_var_t result_var = ctx_new_temp(ctx, return_qbe_type);
 
