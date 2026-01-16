@@ -8,6 +8,9 @@
 
 #define PRIVATE_PREFIX "__scc__"
 
+// TODO: Use this macro where appropriate
+#define heapify(type, value) ((type *)_heapify(sizeof(type), (value)))
+
 #define unused(x) (void)(x)
 
 #define assert(expr) \
@@ -41,3 +44,4 @@
     unused(name)
 
 char *read_file(const char *path);
+void *_heapify(size_t size, const void *value);

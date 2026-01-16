@@ -66,11 +66,10 @@ static type_t type_from_node(node_t *node) {
 			.kind = TYPE_FUNC,
 			.pointer_depth = 0,
 			.as.func = {
-				.return_type = malloc(sizeof(type_t)),
+				.return_type = heapify(type_t, &return_type),
 				.parameter_types = parameter_types,
 			},
 		};
-		*function_type.as.func.return_type = return_type;
 		return function_type;
 	}
 	default:
@@ -313,7 +312,25 @@ bool is_global_map(list_t *symbol_maps) {
 }
 
 static bool type_eq(type_t a, type_t b) {
-	return a.kind == b.kind && a.pointer_depth == b.pointer_depth;
+	if (a.kind != b.kind || a.pointer_depth != b.pointer_depth) {
+		return false;
+	}
+	if (a.kind == TYPE_FUNC) {
+		if (a.as.func.parameter_types.length != b.as.func.parameter_types.length) {
+			return false;
+		}
+		for (size_t i = 0; i < a.as.func.parameter_types.length; i++) {
+			type_t *a_param_type = list_at(&a.as.func.parameter_types, type_t, i);
+			type_t *b_param_type = list_at(&b.as.func.parameter_types, type_t, i);
+			if (!type_eq(*a_param_type, *b_param_type)) {
+				return false;
+			}
+		}
+		if (!type_eq(*a.as.func.return_type, *b.as.func.return_type)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 static bool type_is_primitive(type_t type) {

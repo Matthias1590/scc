@@ -18,3 +18,10 @@ char *read_file(const char *path) {
     fclose(file);
     return buffer;
 }
+
+void *_heapify(size_t size, const void *value) {
+    void *ptr = malloc(size);
+    assert(ptr != NULL);
+    memcpy(ptr, value, size);
+    return ptr;
+}
