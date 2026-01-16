@@ -60,6 +60,7 @@ static type_t type_from_node(node_t *node) {
 
 typedef enum {
 	QBE_VAR_IDENTIFIER,
+	QBE_VAR_DATA,
 	QBE_VAR_TEMP,
 	QBE_VAR_PARAM,
 	QBE_VAR_FUNC,
@@ -77,7 +78,13 @@ typedef struct {
 	qbe_var_type_t var_type;
 	qbe_value_type_t value_type;
 	union {
-		char *identifier;
+		struct {
+			char *name;
+			size_t scope_depth;
+		} identifier;
+		char *data;
+		char *param;
+		char *func;
 		size_t temp;
 	} as;
 } qbe_var_t;
@@ -124,12 +131,11 @@ static qbe_var_t ctx_add_data(codegen_ctx_t *ctx, const void *data, size_t data_
 	list_push(&ctx->readonly_values, &readonly_value);
 
 	qbe_var_t data_var = {
-		.global = true,
-		.var_type = QBE_VAR_IDENTIFIER,
+		.var_type = QBE_VAR_DATA,
 		.value_type = QBE_VALUE_LONG,
-		.as.identifier = malloc(32),
+		.as.data = malloc(32),
 	};
-	sprintf(data_var.as.identifier, PRIVATE_PREFIX"data_%zu", ctx->readonly_values.length - 1);
+	sprintf(data_var.as.data, PRIVATE_PREFIX"data_%zu", ctx->readonly_values.length - 1);
 	return data_var;
 }
 
@@ -157,7 +163,7 @@ static void qbe_write_type(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
 }
 
 static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
-	if (var.global) {
+	if (var.global || var.var_type == QBE_VAR_DATA || var.var_type == QBE_VAR_FUNC) {
 		fprintf(ctx->out_file, "$");
 	} else {
 		fprintf(ctx->out_file, "%%");
@@ -166,9 +172,9 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 	switch (var.var_type) {
 		case QBE_VAR_IDENTIFIER:
 			if (!var.global) {
-				fprintf(ctx->out_file, "ident_");
+				fprintf(ctx->out_file, "ident_%zu_", var.as.identifier.scope_depth);
 			}
-			fprintf(ctx->out_file, "%s", var.as.identifier);
+			fprintf(ctx->out_file, "%s", var.as.identifier.name);
 			break;
 		case QBE_VAR_TEMP:
 			assert(!var.global);
@@ -176,11 +182,13 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 			break;
 		case QBE_VAR_PARAM:
 			assert(!var.global);
-			fprintf(ctx->out_file, "param_%s", var.as.identifier);
+			fprintf(ctx->out_file, "param_%s", var.as.param);
 			break;
 		case QBE_VAR_FUNC:
-			assert(var.global);
-			fprintf(ctx->out_file, "%s", var.as.identifier);
+			fprintf(ctx->out_file, "%s", var.as.func);
+			break;
+		case QBE_VAR_DATA:
+			fprintf(ctx->out_file, "%s", var.as.data);
 			break;
 	}
 }
@@ -218,6 +226,19 @@ static size_t qbe_type_size(qbe_value_type_t value_type) {
 	}
 }
 
+qbe_var_t qbe_var_from_symbol(symbol_t *symbol) {
+	qbe_var_t var = {
+		.global = symbol->global,
+		.var_type = QBE_VAR_IDENTIFIER,
+		.value_type = qbe_type_from_type(type_from_node(node_ref_get(symbol->type_ref))),
+		.as.identifier = {
+			.name = symbol->name->as.identifier,
+			.scope_depth = symbol->scope_depth,
+		},
+	};
+	return var;
+}
+
 static symbol_t *find_symbol(list_t symbol_map, sv_t name) {
 	for (size_t i = 0; i < symbol_map.length; i++) {
 		symbol_t *symbol = list_at(&symbol_map, symbol_t, i);
@@ -253,10 +274,14 @@ static void pop_map(list_t *symbol_maps) {
 }
 
 static void add_symbol(list_t *symbol_maps, symbol_t symbol) {
+	assert(symbol.scope_depth == 0 && "Scope depth should not be set manually.");
+	symbol.scope_depth = symbol_maps->length - 1;
+
 	assert(symbol_maps->length > 0);
 	list_t *current_map = list_at(symbol_maps, list_t, symbol_maps->length - 1);
 
-	if (find_symbol(*current_map, sv_from_cstr(symbol.name->as.identifier)) != NULL) {
+	symbol_t *existing_symbol = find_symbol(*current_map, sv_from_cstr(symbol.name->as.identifier));
+	if (existing_symbol != NULL && existing_symbol->scope_depth >= symbol.scope_depth) {
 		todo("Report redeclaration error");
 	}
 
@@ -271,19 +296,24 @@ static bool type_eq(type_t a, type_t b) {
 	return a.kind == b.kind && a.pointer_depth == b.pointer_depth;
 }
 
-bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue) {
+bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue, size_t scope_depth) {
 	node_t *node = node_ref_get(node_ref);
+	bool is_in_function_body = scope_depth > 0;
 
 	switch (node->type) {
 		case NODE_BLOCK:
-			push_map(symbol_maps);  // TODO: This shouldnt happen on function bodies, you cant shadow parameters directly in the function body
+			if (is_in_function_body) {
+				push_map(symbol_maps);
+			}
 			for (size_t i = 0; i < node->as.block.length; i++) {
 				node_ref_t *child_ref = list_at(&node->as.block, node_ref_t, i);
-				if (!analyze_node(ctx, symbol_maps, *child_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, *child_ref, false, scope_depth + 1)) {
 					return false;
 				}
 			}
-			pop_map(symbol_maps);
+			if (is_in_function_body) {
+				pop_map(symbol_maps);
+			}
 			return true;
 		case NODE_VAR_DECL:
 			add_symbol(symbol_maps, (symbol_t) {
@@ -292,11 +322,16 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				.global = is_global_map(symbol_maps),
 			});
 			type_t type = type_from_node(node_ref_get(node->as.var_decl.type_ref));
+
+			// TODO: Maybe have add_symbol return a ref_t to the symbol and then use qbe_var_from_symbol here instead
 			qbe_var_t var = (qbe_var_t) {
 				.global = is_global_map(symbol_maps),
 				.var_type = QBE_VAR_IDENTIFIER,
 				.value_type = qbe_type_from_type(type),
-				.as.identifier = node->as.var_decl.name->as.identifier,
+				.as.identifier = {
+					.name = node->as.var_decl.name->as.identifier,
+					.scope_depth = scope_depth,
+				}
 			};
 
 			// Allocate stack space
@@ -307,7 +342,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			if (!node_ref_is_null(node->as.var_decl.init_expr_ref)) {
 				// TODO: Analyze init expression type compatibility
 
-				if (!analyze_node(ctx, symbol_maps, node->as.var_decl.init_expr_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.var_decl.init_expr_ref, false, scope_depth)) {
 					return false;
 				}
 				fprintf(ctx->out_file, "    ");
@@ -320,12 +355,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			return true;
 		case NODE_ASSIGNMENT: {
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, true)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, true, scope_depth)) {
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
 			type_t left_type = ctx->result_type;
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
@@ -344,12 +379,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		case NODE_SUB:
 		case NODE_MULT:
 		case NODE_DIV: {
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
 			type_t left_type = ctx->result_type;
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
@@ -411,17 +446,13 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 
 			type_t type = type_from_node(node_ref_get(symbol->type_ref));
+
+			// Always emit pointer for functions, never implicitly dereference them
 			if (type.kind == TYPE_FUNC) {
-				// assert(emit_lvalue && "Cannot emit non-lvalue for function identifiers");
 				emit_lvalue = true;
 			}
 
-			qbe_var_t var = (qbe_var_t) {
-				.global = symbol->global,
-				.var_type = QBE_VAR_IDENTIFIER,
-				.value_type = qbe_type_from_type(type),
-				.as.identifier = symbol->name->as.identifier,
-			};
+			qbe_var_t var = qbe_var_from_symbol(symbol);
 
 			if (emit_lvalue) {
 				// Just return the address
@@ -481,14 +512,16 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			fprintf(ctx->out_file, "export function ");
 			qbe_write_type(ctx, qbe_type_from_type(ctx->function_return_type));
+			// TODO: Use qbe_var_from_symbol here
 			qbe_write_var(ctx, (qbe_var_t) {
 				.global = true,
 				.var_type = QBE_VAR_FUNC,
-				.as.identifier = signature_node->as.function_signature.name->as.identifier,
+				.as.func = signature_node->as.function_signature.name->as.identifier,
 			});
 
 			push_map(symbol_maps);
 
+			// Write signature and add symbols for parameters
 			fprintf(ctx->out_file, "(");
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
@@ -502,7 +535,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				qbe_write_var(ctx, (qbe_var_t) {
 					.global = false,
 					.var_type = QBE_VAR_PARAM,
-					.as.identifier = param_node->as.var_decl.name->as.identifier,
+					.as.param = param_node->as.var_decl.name->as.identifier,
 				});
 
 				add_symbol(symbol_maps, (symbol_t) {
@@ -514,7 +547,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, ")\n{\n");
 			fprintf(ctx->out_file, "@start\n");
 
-			// Copy parameters into local stack space
+			// Copy parameters to stack
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
 				node_t *param_node = node_ref_get(*param_ref);
@@ -524,13 +557,16 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 					.global = false,
 					.var_type = QBE_VAR_IDENTIFIER,
 					.value_type = qbe_type_from_type(param_type),
-					.as.identifier = param_node->as.var_decl.name->as.identifier,
+					.as.identifier = {
+						.name = param_node->as.var_decl.name->as.identifier,
+						.scope_depth = scope_depth + 1,
+					},
 				};
 				qbe_var_t param_input_var = (qbe_var_t) {
 					.global = false,
 					.var_type = QBE_VAR_PARAM,
 					.value_type = qbe_type_from_type(param_type),
-					.as.identifier = param_node->as.var_decl.name->as.identifier,
+					.as.param = param_node->as.var_decl.name->as.identifier,
 				};
 
 				fprintf(ctx->out_file, "    ");
@@ -544,7 +580,9 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				fprintf(ctx->out_file, "\n");
 			}
 
-			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false)) {
+			// Body, we don't increment scope_depth because the block node does that already
+			// TODO: A function body can only be a block
+			if (!analyze_node(ctx, symbol_maps, node->as.function.body_ref, false, scope_depth)) {
 				return false;
 			}
 			fprintf(ctx->out_file, "@end\n");
@@ -560,7 +598,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		case NODE_RETURN: {
 			type_t expr_type = void_type;
 			if (!node_ref_is_null(node->as.ret.expr_ref)) {
-				if (!analyze_node(ctx, symbol_maps, node->as.ret.expr_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.ret.expr_ref, false, scope_depth)) {
 					return false;
 				}
 				expr_type = ctx->result_type;
@@ -583,7 +621,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "    jmp @end\n");
 		} break;
 		case NODE_CAST: {
-			if (!analyze_node(ctx, symbol_maps, node->as.cast.expr_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.cast.expr_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t expr_var = ctx->result_var;
@@ -612,14 +650,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type = target_type;
 		} break;
 		case NODE_ADDRESS_OF: {
-			if (!analyze_node(ctx, symbol_maps, node->as.address_of.expr_ref, true)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.address_of.expr_ref, true, scope_depth)) {
 				return false;
 			}
 
 			ctx->result_type.pointer_depth++;
 		} break;
 		case NODE_DEREF: {
-			if (!analyze_node(ctx, symbol_maps, node->as.deref.expr_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.deref.expr_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t ptr_var = ctx->result_var;
@@ -642,12 +680,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type.pointer_depth--;
 		} break;
 		case NODE_NEQ: {
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
 			type_t left_type = ctx->result_type;
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
@@ -674,7 +712,9 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type = int_type;
 		} break;
 		case NODE_IF: {
-			if (!analyze_node(ctx, symbol_maps, node->as.if_.expr_ref, false)) {
+			// TODO/NOTE: We dont increment scope_depth for ifs because a block would do it for us, the reason is that "a dependent statement may not be a declaration", so if the body is a single statement and not a block and its a decl, its invalid
+
+			if (!analyze_node(ctx, symbol_maps, node->as.if_.expr_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t cond_var = ctx->result_var;
@@ -689,7 +729,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				qbe_write_var(ctx, cond_var);
 				fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, end_label.label_num);  // TODO: Create some qbe_write_label function
 				fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
-				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false, scope_depth)) {
 					return false;
 				}
 				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
@@ -703,13 +743,13 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				qbe_write_var(ctx, cond_var);
 				fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", then_label.label_num, else_label.label_num);  // TODO: Create some qbe_write_label function
 				fprintf(ctx->out_file, "@label_%zu\n", then_label.label_num);
-				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.then_ref, false, scope_depth)) {
 					return false;
 				}
 				fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
 				fprintf(ctx->out_file, "    jmp @label_%zu\n", end_label.label_num);
 				fprintf(ctx->out_file, "@label_%zu\n", else_label.label_num);
-				if (!analyze_node(ctx, symbol_maps, node->as.if_.else_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, node->as.if_.else_ref, false, scope_depth)) {
 					return false;
 				}
 				fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
@@ -718,7 +758,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		case NODE_FILE: {
 			for (size_t i = 0; i < node->as.file.top_levels.length; i++) {
 				node_ref_t *child_ref = list_at(&node->as.file.top_levels, node_ref_t, i);
-				if (!analyze_node(ctx, symbol_maps, *child_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, *child_ref, false, scope_depth)) {
 					return false;
 				}
 			}
@@ -729,14 +769,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			list_t arg_types = { .element_size = sizeof(type_t) };
 			for (size_t i = 0; i < node->as.call.arg_refs.length; i++) {
 				node_ref_t *arg_ref = list_at(&node->as.call.arg_refs, node_ref_t, i);
-				if (!analyze_node(ctx, symbol_maps, *arg_ref, false)) {
+				if (!analyze_node(ctx, symbol_maps, *arg_ref, false, scope_depth)) {
 					return false;
 				}
 				list_push(&arg_vars, &ctx->result_var);
 				list_push(&arg_types, &ctx->result_type);
 			}
 
-			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, true)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, true, scope_depth)) {
 				return false;
 			}
 			qbe_var_t function_var = ctx->result_var;
@@ -768,12 +808,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type = return_type;
 		} break;
 		case NODE_EQEQ: {
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
 			type_t left_type = ctx->result_type;
-			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
@@ -800,7 +840,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_type = int_type;
 		} break;
 		case NODE_DISCARD: {
-			if (!analyze_node(ctx, symbol_maps, node->as.discard.expr_ref, false)) {
+			if (!analyze_node(ctx, symbol_maps, node->as.discard.expr_ref, false, scope_depth)) {
 				return false;
 			}
 
@@ -811,7 +851,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			// node->as.stringlit.as.stringlit.length
 			char str[node->as.stringlit.as.stringlit.length + 1];
 			sv_to_cstr(node->as.stringlit.as.stringlit, str, sizeof(str));
-			
+
 			// data $fmt = { b "One and one make %d!\n", b 0 }
 			ctx->result_var = ctx_add_data(ctx, str, strlen(str) + 1);
 			ctx->result_type = (type_t) {
@@ -840,7 +880,7 @@ bool analyze(node_ref_t root_ref, const char *out_path) {
 	list_t symbol_maps = { .element_size = sizeof(list_t) };
 	push_map(&symbol_maps);
 
-	bool success = analyze_node(&ctx, &symbol_maps, root_ref, false);
+	bool success = analyze_node(&ctx, &symbol_maps, root_ref, false, 0);
 
 	// Write readonly data
 	for (size_t i = 0; i < ctx.readonly_values.length; i++) {
