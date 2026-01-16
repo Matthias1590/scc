@@ -834,7 +834,9 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_var_t function_var = ctx->result_var;
 			type_t function_type = ctx->result_type;
 
-			assert(function_type.kind == TYPE_FUNC && "TODO: Handle this error properly");
+			if (function_type.kind != TYPE_FUNC) {
+				report_error(node->source_loc, "Attempted to call a non-function value");
+			}
 
 			type_t return_type = *function_type.as.func.return_type;
 
