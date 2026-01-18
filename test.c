@@ -1,11 +1,7 @@
-int puts(char *s);
+#include "test.h"
 
 int main(int argc, char **argv) {
-    {
-        int argc = 5;
-        int x = argc;
-    }
-    puts("Hey!");
+    puts("Hi!");
     puts(*argv);
     return argc;
 }

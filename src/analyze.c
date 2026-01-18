@@ -88,6 +88,7 @@ typedef enum {
 typedef enum {
 	QBE_VALUE_VOID,
 	QBE_VALUE_WORD,
+	QBE_VALUE_SIGNED_BYTE,
 	QBE_VALUE_LONG,
 	QBE_VALUE_SINGLE,
 } qbe_value_type_t;
@@ -178,6 +179,9 @@ static void qbe_write_type(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
 		case QBE_VALUE_SINGLE:
 			fprintf(ctx->out_file, "s ");
 			break;
+		case QBE_VALUE_SIGNED_BYTE:
+			fprintf(ctx->out_file, "sb ");
+			break;
 	}
 }
 
@@ -212,6 +216,27 @@ static void qbe_write_var(codegen_ctx_t *ctx, qbe_var_t var) {
 	}
 }
 
+// TODO: Maybe just create a qbe_write_XXX_instr function for each instruction
+static void qbe_write_store_instr(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
+	fprintf(ctx->out_file, "store");
+	switch (value_type) {
+		case QBE_VALUE_VOID:
+			unreachable();
+		case QBE_VALUE_WORD:
+			fprintf(ctx->out_file, "w ");
+			break;
+		case QBE_VALUE_SIGNED_BYTE:
+			fprintf(ctx->out_file, "b ");
+			break;
+		case QBE_VALUE_LONG:
+			fprintf(ctx->out_file, "l ");
+			break;
+		case QBE_VALUE_SINGLE:
+			fprintf(ctx->out_file, "s ");
+			break;
+	}
+}
+
 static qbe_value_type_t qbe_type_from_type(type_t type) {
 	if (type.pointer_depth > 0) {
 		return QBE_VALUE_LONG;
@@ -223,8 +248,28 @@ static qbe_value_type_t qbe_type_from_type(type_t type) {
 		return QBE_VALUE_LONG;
 	case TYPE_VOID:
 		return QBE_VALUE_VOID;
+	case TYPE_CHAR:
+		return QBE_VALUE_SIGNED_BYTE;
 	case TYPE_FUNC:
 		return QBE_VALUE_LONG;
+	default:
+		todo("Unhandled type conversion from type to qbe type");
+	}
+}
+
+static qbe_value_type_t qbe_basetype_from_type(type_t type) {
+	if (type.pointer_depth > 0) {
+		return QBE_VALUE_LONG;
+	}
+	switch (type.kind) {
+	case TYPE_CHAR:
+	case TYPE_INT:
+		return QBE_VALUE_WORD;
+	case TYPE_FUNC:
+	case TYPE_LONG:
+		return QBE_VALUE_LONG;
+	case TYPE_VOID:
+		return QBE_VALUE_VOID;
 	default:
 		todo("Unhandled type conversion from type to qbe type");
 	}
@@ -236,6 +281,8 @@ static size_t qbe_type_size(qbe_value_type_t value_type) {
 			return 0;
 		case QBE_VALUE_WORD:
 			return 4;
+		case QBE_VALUE_SIGNED_BYTE:
+			return 1;
 		case QBE_VALUE_SINGLE:
 			return 4;
 		case QBE_VALUE_LONG:
@@ -347,6 +394,33 @@ static bool type_is_primitive(type_t type) {
 	}
 }
 
+static bool promote_value(codegen_ctx_t *ctx, qbe_var_t var, type_t from_type, type_t to_type) {
+	assert(type_is_primitive(from_type) && type_is_primitive(to_type));
+
+	qbe_value_type_t from_qbe_type = qbe_basetype_from_type(from_type);
+	qbe_value_type_t to_qbe_type = qbe_basetype_from_type(to_type);
+
+	if (from_qbe_type == to_qbe_type) {
+		// No promotion needed
+		ctx->result_var = var;
+		ctx->result_type = from_type;
+		return true;
+	}
+
+	qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(to_type));
+	fprintf(ctx->out_file, "    ");
+	qbe_write_var(ctx, result_var);
+	fprintf(ctx->out_file, " =");
+	qbe_write_type(ctx, qbe_basetype_from_type(to_type));
+	fprintf(ctx->out_file, "cast ");
+	qbe_write_var(ctx, var);
+	fprintf(ctx->out_file, "\n");
+
+	ctx->result_var = result_var;
+	ctx->result_type = to_type;
+	return true;
+}
+
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue, size_t scope_depth) {
 	node_t *node = node_ref_get(node_ref);
 	bool is_in_function_body = scope_depth > 0;
@@ -397,8 +471,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 					return false;
 				}
 				fprintf(ctx->out_file, "    ");
-				fprintf(ctx->out_file, "store");
-				qbe_write_type(ctx, qbe_type_from_type(type));
+				qbe_write_store_instr(ctx, qbe_type_from_type(type));
 				qbe_write_var(ctx, ctx->result_var);
 				fprintf(ctx->out_file, ", ");
 				qbe_write_var(ctx, var);
@@ -419,7 +492,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			// TODO: Ensure left_type and right_type are compatible
 
 			fprintf(ctx->out_file, "    ");
-			fprintf(ctx->out_file, "store");;
+			fprintf(ctx->out_file, "store");
 			qbe_write_type(ctx, qbe_type_from_type(left_type));
 			qbe_write_var(ctx, right_var);
 			fprintf(ctx->out_file, ", ");
@@ -435,19 +508,39 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			qbe_var_t left_var = ctx->result_var;
 			type_t left_type = ctx->result_type;
+
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
-			// node_t *right_type = ctx->result_type;
+			type_t right_type = ctx->result_type;
 
-			// TODO: Ensure left_type and right_type are compatible
+			// Promote to max(int, max(left, right))
+			type_t max_type = int_type;
+			if (qbe_type_size(qbe_type_from_type(left_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
+				max_type = left_type;
+			}
+			if (qbe_type_size(qbe_type_from_type(right_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
+				max_type = right_type;
+			}
 
-			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(left_type));
+			if (!promote_value(ctx, left_var, left_type, max_type)) {
+				return false;
+			}
+			left_var = ctx->result_var;
+			left_type = ctx->result_type;
+
+			if (!promote_value(ctx, right_var, right_type, max_type)) {
+				return false;
+			}
+			right_var = ctx->result_var;
+			right_type = ctx->result_type;
+
+			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(max_type));
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_type(ctx, qbe_type_from_type(max_type));
 			switch (node->type) {
 				case NODE_ADD:
 					fprintf(ctx->out_file, "add ");
@@ -470,7 +563,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "\n");
 
 			ctx->result_var = result_var;
-			ctx->result_type = left_type;  // TODO: This assumes both sides have the same type, no promotion here, fix that
+			ctx->result_type = max_type;
 		} break;
 		case NODE_INTLIT:
 			ctx->result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
@@ -515,14 +608,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				fprintf(ctx->out_file, "    ");
 				qbe_write_var(ctx, temp);
 				fprintf(ctx->out_file, " =");
-				qbe_write_type(ctx, qbe_type_from_type(type));
+				qbe_write_type(ctx, qbe_basetype_from_type(type));
 				fprintf(ctx->out_file, "load");
 				qbe_write_type(ctx, qbe_type_from_type(type));
 				qbe_write_var(ctx, var);
 				fprintf(ctx->out_file, "\n");
 
 				ctx->result_var = temp;
-				ctx->result_type = type_from_node(node_ref_get(symbol->type_ref));
+				ctx->result_type = type;
 			}
 		} break;
 		case NODE_FUNCTION: {
@@ -720,7 +813,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, result_type);
+			qbe_write_type(ctx, qbe_basetype_from_type(ctx->result_type));
 			fprintf(ctx->out_file, "load");
 			qbe_write_type(ctx, result_type);
 			qbe_write_var(ctx, ptr_var);

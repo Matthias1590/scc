@@ -1,10 +1,36 @@
 #include "scc.h"
 
+char *preprocess_file(const char *in_path) {
+    // Run `cpp -x c {PATH} | grep -v "^#"`
+    char command[512];
+    snprintf(command, sizeof(command), "cpp -x c \"%s\" | grep -v \"^#\"", in_path);
+    
+    FILE *pipe = popen(command, "r");
+    if (pipe == NULL) {
+        todo("Handle preprocess error");
+    }
+    
+    char *buf = NULL;
+    size_t len = 0;
+    FILE *mem = open_memstream(&buf, &len);
+
+    char tmp[4096];
+    while (fgets(tmp, sizeof tmp, pipe))
+        fputs(tmp, mem);
+
+    pclose(pipe);
+    fclose(mem);   // finalizes buffer
+    // buf is NUL-terminated, length in len
+
+    return buf;
+}
+
 int main(void) {
     char *in_path = "test.c";
     char *out_path = "test.qbe";
 
-    char *code = read_file(in_path);
+    char *code = preprocess_file(in_path);
+    // char *code = read_file(in_path);
     sv_t code_view = sv_from_cstr(code);
 
     list_t tokens = { .element_size = sizeof(token_t) };
