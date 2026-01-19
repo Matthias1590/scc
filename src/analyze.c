@@ -412,7 +412,7 @@ static bool promote_value(codegen_ctx_t *ctx, qbe_var_t var, type_t from_type, t
 	qbe_write_var(ctx, result_var);
 	fprintf(ctx->out_file, " =");
 	qbe_write_type(ctx, qbe_basetype_from_type(to_type));
-	fprintf(ctx->out_file, "extsb "); // TODO: double check
+	fprintf(ctx->out_file, "extsb "); // TODO: this assumes the value is a signed byte, which is just not always the case.
 	qbe_write_var(ctx, var);
 	fprintf(ctx->out_file, "\n");
 
