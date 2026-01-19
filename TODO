@@ -48,5 +48,5 @@ Codegen:
 [*] Forward declaration
 [ ] While loops
 [ ] Implicit casting
-[ ] Int promotion and all that
+[-] Int promotion and all that
 This is to get a hello world working.

@@ -113,6 +113,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_IF;
     } else if (strcmp(buffer, "else") == 0) {
         token.type = TOKEN_ELSE;
+    } else if (strcmp(buffer, "while") == 0) {
+        token.type = TOKEN_WHILE;
     } else {
         strcpy(token.as.identifier, buffer);
     }
@@ -271,6 +273,9 @@ void token_print(const token_t *token) {
             break;
         case TOKEN_LONG:
             printf("LONG");
+            break;
+        case TOKEN_WHILE:
+            printf("WHILE");
             break;
         default:
             unreachable();

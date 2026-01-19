@@ -827,6 +827,41 @@ static bool try_consume_return(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_while(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    token_t *while_token;
+    if (!try_consume_token(&new_ctx, TOKEN_WHILE, &while_token)) {
+        return false;
+    }
+
+    node_t while_node = {
+        .type = NODE_WHILE,
+        .source_loc = while_token->source_loc,
+    };
+
+    if (!try_consume_token(&new_ctx, TOKEN_LPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_expr_0(&new_ctx)) {
+        return false;
+    }
+    while_node.as.while_.expr_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_stmt(&new_ctx)) {
+        return false;
+    }
+    while_node.as.while_.body_ref = ctx_get_result_ref(&new_ctx);
+
+    ctx_update(ctx, &new_ctx, &while_node);
+    return true;
+}
+
 static bool try_consume_if(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -936,6 +971,10 @@ static bool try_consume_stmt(parse_ctx_t *ctx) {
     }
 
     if (try_consume_if(ctx)) {
+        return true;
+    }
+
+    if (try_consume_while(ctx)) {
         return true;
     }
 

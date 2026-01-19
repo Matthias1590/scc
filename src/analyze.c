@@ -412,7 +412,7 @@ static bool promote_value(codegen_ctx_t *ctx, qbe_var_t var, type_t from_type, t
 	qbe_write_var(ctx, result_var);
 	fprintf(ctx->out_file, " =");
 	qbe_write_type(ctx, qbe_basetype_from_type(to_type));
-	fprintf(ctx->out_file, "cast ");
+	fprintf(ctx->out_file, "extsb "); // TODO: double check
 	qbe_write_var(ctx, var);
 	fprintf(ctx->out_file, "\n");
 
@@ -1019,6 +1019,26 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				.kind = TYPE_CHAR,
 				.pointer_depth = 1,
 			};
+		} break;
+		case NODE_WHILE: {
+			qbe_label_t cond_label = ctx_new_label(ctx);
+			qbe_label_t start_label = ctx_new_label(ctx);
+			qbe_label_t end_label = ctx_new_label(ctx);
+
+			fprintf(ctx->out_file, "@label_%zu\n", cond_label.label_num);
+			// TODO: Ensure expr_ref evaluates to an int/bool or whatever, at least not void or something
+			if (!analyze_node(ctx, symbol_maps, node->as.while_.expr_ref, false, scope_depth)) {
+				return false;
+			}
+			fprintf(ctx->out_file, "    jnz");
+			qbe_write_var(ctx, ctx->result_var);
+			fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", start_label.label_num, end_label.label_num);
+			fprintf(ctx->out_file, "@label_%zu\n", start_label.label_num);
+			if (!analyze_node(ctx, symbol_maps, node->as.while_.body_ref, false, scope_depth)) {
+				return false;
+			}
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", cond_label.label_num);
+			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");

@@ -31,6 +31,7 @@ typedef enum {
     NODE_CALL,
     NODE_EQEQ,
     NODE_DISCARD,
+    NODE_WHILE,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -85,6 +86,10 @@ struct node_t {
             node_ref_t then_ref;
             node_ref_t else_ref;
         } if_;
+        struct {
+            node_ref_t expr_ref;
+            node_ref_t body_ref;
+        } while_;
         struct {
             list_t top_levels;
         } file;
