@@ -5,7 +5,7 @@ int main(int argc, char **argv) {
     {
         puts(*argv);
         argc = argc - 1;
-        argv = argv + 8;
+        argv = argv + 2;
     }
     return argc;
 }

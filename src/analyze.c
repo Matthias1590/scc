@@ -237,6 +237,27 @@ static void qbe_write_store_instr(codegen_ctx_t *ctx, qbe_value_type_t value_typ
 	}
 }
 
+static void qbe_write_ext_instr(codegen_ctx_t *ctx, type_t type) {
+	fprintf(ctx->out_file, "ext");
+
+	if (type.pointer_depth > 0 || type.kind == TYPE_LONG || type.kind == TYPE_FUNC) {
+		assert(false && "Cannot extend long or pointer types");
+	}
+
+	switch (type.kind) {
+		case TYPE_VOID:
+		case TYPE_FUNC:
+		case TYPE_LONG:
+			unreachable();
+		case TYPE_CHAR:
+			fprintf(ctx->out_file, "sb ");
+			break;
+		case TYPE_INT:
+			fprintf(ctx->out_file, "sw ");
+			break;
+	}
+}
+
 static qbe_value_type_t qbe_type_from_type(type_t type) {
 	if (type.pointer_depth > 0) {
 		return QBE_VALUE_LONG;
@@ -412,13 +433,36 @@ static bool promote_value(codegen_ctx_t *ctx, qbe_var_t var, type_t from_type, t
 	qbe_write_var(ctx, result_var);
 	fprintf(ctx->out_file, " =");
 	qbe_write_type(ctx, qbe_basetype_from_type(to_type));
-	fprintf(ctx->out_file, "extsb "); // TODO: this assumes the value is a signed byte, which is just not always the case.
+	qbe_write_ext_instr(ctx, from_type);
 	qbe_write_var(ctx, var);
 	fprintf(ctx->out_file, "\n");
 
 	ctx->result_var = result_var;
 	ctx->result_type = to_type;
 	return true;
+}
+
+static bool mult_by_ptr_size(codegen_ctx_t *ctx, qbe_var_t var, type_t ptr_type) {
+	assert(ptr_type.pointer_depth > 0);
+
+	type_t base_type = ptr_type;
+	base_type.pointer_depth--;
+
+	size_t elem_size = qbe_type_size(qbe_type_from_type(base_type));
+
+	qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(ptr_type));
+	fprintf(ctx->out_file, "    ");
+	qbe_write_var(ctx, result_var);
+	fprintf(ctx->out_file, " =");
+	qbe_write_type(ctx, qbe_basetype_from_type(ptr_type));
+	fprintf(ctx->out_file, "mul ");
+	qbe_write_var(ctx, var);
+	fprintf(ctx->out_file, ", %zu\n", elem_size);
+
+	ctx->result_var = result_var;
+	ctx->result_type = ptr_type;
+	return true;
+
 }
 
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue, size_t scope_depth) {
@@ -515,55 +559,141 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_var_t right_var = ctx->result_var;
 			type_t right_type = ctx->result_type;
 
-			// Promote to max(int, max(left, right))
-			type_t max_type = int_type;
-			if (qbe_type_size(qbe_type_from_type(left_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
-				max_type = left_type;
-			}
-			if (qbe_type_size(qbe_type_from_type(right_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
-				max_type = right_type;
-			}
+			// TODO: Ensure this is correct behavior
+			// If either is pointer, promote other to int and do pointer arithmetic?
+			if (left_type.pointer_depth > 0) {
+				if (!promote_value(ctx, right_var, right_type, left_type)) {
+					return false;
+				}
+				right_var = ctx->result_var;
+				right_type = ctx->result_type;
 
-			if (!promote_value(ctx, left_var, left_type, max_type)) {
-				return false;
-			}
-			left_var = ctx->result_var;
-			left_type = ctx->result_type;
+				if (!mult_by_ptr_size(ctx, right_var, left_type)) {
+					return false;
+				}
+				right_var = ctx->result_var;
+				right_type = ctx->result_type;
 
-			if (!promote_value(ctx, right_var, right_type, max_type)) {
-				return false;
-			}
-			right_var = ctx->result_var;
-			right_type = ctx->result_type;
+				qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(left_type));
+				fprintf(ctx->out_file, "    ");
+				qbe_write_var(ctx, result_var);
+				fprintf(ctx->out_file, " =");
+				qbe_write_type(ctx, qbe_type_from_type(left_type));
+				switch (node->type) {
+					case NODE_ADD:
+						fprintf(ctx->out_file, "add ");
+						break;
+					case NODE_SUB:
+						fprintf(ctx->out_file, "sub ");
+						break;
+					case NODE_MULT:
+						fprintf(ctx->out_file, "mul ");
+						break;
+					case NODE_DIV:
+						fprintf(ctx->out_file, "div ");
+						break;
+					default:
+						unreachable();
+				}
+				qbe_write_var(ctx, left_var);
+				fprintf(ctx->out_file, ", ");
+				qbe_write_var(ctx, right_var);
+				fprintf(ctx->out_file, "\n");
 
-			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(max_type));
-			fprintf(ctx->out_file, "    ");
-			qbe_write_var(ctx, result_var);
-			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, qbe_type_from_type(max_type));
-			switch (node->type) {
-				case NODE_ADD:
-					fprintf(ctx->out_file, "add ");
-					break;
-				case NODE_SUB:
-					fprintf(ctx->out_file, "sub ");
-					break;
-				case NODE_MULT:
-					fprintf(ctx->out_file, "mul ");
-					break;
-				case NODE_DIV:
-					fprintf(ctx->out_file, "div ");
-					break;
-				default:
-					unreachable();
-			}
-			qbe_write_var(ctx, left_var);
-			fprintf(ctx->out_file, ", ");
-			qbe_write_var(ctx, right_var);
-			fprintf(ctx->out_file, "\n");
+				ctx->result_var = result_var;
+				ctx->result_type = left_type;
+			} else if (right_type.pointer_depth > 0) {
+				if (!promote_value(ctx, left_var, left_type, right_type)) {
+					return false;
+				}
+				left_var = ctx->result_var;
+				left_type = ctx->result_type;
 
-			ctx->result_var = result_var;
-			ctx->result_type = max_type;
+				if (!mult_by_ptr_size(ctx, left_var, right_type)) {
+					return false;
+				}
+				left_var = ctx->result_var;
+				left_type = ctx->result_type;
+
+				qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(right_type));
+				fprintf(ctx->out_file, "    ");
+				qbe_write_var(ctx, result_var);
+				fprintf(ctx->out_file, " =");
+				qbe_write_type(ctx, qbe_type_from_type(right_type));
+				switch (node->type) {
+					case NODE_ADD:
+						fprintf(ctx->out_file, "add ");
+						break;
+					case NODE_SUB:
+						fprintf(ctx->out_file, "sub ");
+						break;
+					case NODE_MULT:
+						fprintf(ctx->out_file, "mul ");
+						break;
+					case NODE_DIV:
+						fprintf(ctx->out_file, "div ");
+						break;
+					default:
+						unreachable();
+				}
+				qbe_write_var(ctx, left_var);
+				fprintf(ctx->out_file, ", ");
+				qbe_write_var(ctx, right_var);
+				fprintf(ctx->out_file, "\n");
+
+				ctx->result_var = result_var;
+				ctx->result_type = right_type;
+			} else {
+				// Promote to max(int, max(left, right))
+				type_t max_type = int_type;
+				if (qbe_type_size(qbe_type_from_type(left_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
+					max_type = left_type;
+				}
+				if (qbe_type_size(qbe_type_from_type(right_type)) > qbe_type_size(qbe_type_from_type(max_type))) {
+					max_type = right_type;
+				}
+
+				if (!promote_value(ctx, left_var, left_type, max_type)) {
+					return false;
+				}
+				left_var = ctx->result_var;
+				left_type = ctx->result_type;
+
+				if (!promote_value(ctx, right_var, right_type, max_type)) {
+					return false;
+				}
+				right_var = ctx->result_var;
+				right_type = ctx->result_type;
+
+				qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(max_type));
+				fprintf(ctx->out_file, "    ");
+				qbe_write_var(ctx, result_var);
+				fprintf(ctx->out_file, " =");
+				qbe_write_type(ctx, qbe_type_from_type(max_type));
+				switch (node->type) {
+					case NODE_ADD:
+						fprintf(ctx->out_file, "add ");
+						break;
+					case NODE_SUB:
+						fprintf(ctx->out_file, "sub ");
+						break;
+					case NODE_MULT:
+						fprintf(ctx->out_file, "mul ");
+						break;
+					case NODE_DIV:
+						fprintf(ctx->out_file, "div ");
+						break;
+					default:
+						unreachable();
+				}
+				qbe_write_var(ctx, left_var);
+				fprintf(ctx->out_file, ", ");
+				qbe_write_var(ctx, right_var);
+				fprintf(ctx->out_file, "\n");
+
+				ctx->result_var = result_var;
+				ctx->result_type = max_type;
+			}
 		} break;
 		case NODE_INTLIT:
 			ctx->result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
