@@ -18,6 +18,8 @@ set -e
 
 if [ -z "$2" ]; then
     make -B -C "$CURRENT_DIR"
+else
+    make -C "$CURRENT_DIR"
 fi
 
 "$CURRENT_DIR"/scc "$SRC_NAME"

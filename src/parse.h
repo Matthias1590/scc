@@ -113,6 +113,9 @@ struct node_t {
         } negate;
         token_t identifier;
         list_t block;
+        struct {
+            bool is_signed;
+        } type;
     } as;
 };
 

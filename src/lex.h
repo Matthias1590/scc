@@ -34,6 +34,7 @@ typedef enum {
     TOKEN_LT,
     TOKEN_LTE,
     TOKEN_PLUSEQ,
+    TOKEN_UNSIGNED,
 } token_type_t;
 
 typedef struct {

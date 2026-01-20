@@ -13,12 +13,8 @@ bin/%.o: src/%.c
 	@mkdir -p bin
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test: scc $(QBE) test.c
-	./scc
-	$(QBE) -o test.s test.qbe
-	$(CC) test.s -o test.out
-	@echo ./test.out
-	@echo Test program exited with code: $$(./test.out; echo $$?)
+test:
+	./test.sh
 
 $(QBE):
 	make -C qbe

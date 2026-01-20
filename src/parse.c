@@ -130,12 +130,19 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     trace("+ try_consume_type\n");
     parse_ctx_t new_ctx = *ctx;
 
+    bool is_unsigned = false;
+    if (try_consume_token(&new_ctx, TOKEN_UNSIGNED, NULL)) {
+        is_unsigned = true;
+    }
+
     if (new_ctx.token_view.length == 0) {
         trace("- try_consume_type: false\n");
         return false;
     }
 
-    node_t type_node;
+    node_t type_node = {
+        .as.type.is_signed = !is_unsigned,
+    };
 
     token_t *token = lv_at(&new_ctx.token_view, token_t, 0);
     type_node.source_loc = token->source_loc;

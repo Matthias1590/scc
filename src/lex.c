@@ -227,6 +227,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_ELSE;
     } else if (strcmp(buffer, "while") == 0) {
         token.type = TOKEN_WHILE;
+    } else if (strcmp(buffer, "unsigned") == 0) {
+        token.type = TOKEN_UNSIGNED;
     } else {
         strcpy(token.as.identifier, buffer);
     }
