@@ -176,13 +176,15 @@ static bool try_consume_type(parse_ctx_t *ctx) {
     return true;
 }
 
-static bool try_consume_lhs(parse_ctx_t *ctx) {
-    trace("+ try_consume_lhs\n");
+static bool try_consume_expr_0(parse_ctx_t *ctx);
+
+static bool try_consume_identifier(parse_ctx_t *ctx) {
+    trace("+ try_consume_identifier\n");
     parse_ctx_t new_ctx = *ctx;
 
     token_t *identifier_token;
     if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &identifier_token)) {
-        trace("- try_consume_lhs: false\n");
+        trace("- try_consume_identifier: false\n");
         return false;
     }
 
@@ -193,8 +195,12 @@ static bool try_consume_lhs(parse_ctx_t *ctx) {
     };
     ctx_update(ctx, &new_ctx, &var_node);
 
-    trace("- try_consume_lhs: true\n");
+    trace("- try_consume_identifier: true\n");
     return true;
+}
+
+static bool try_consume_lhs(parse_ctx_t *ctx) {
+    return try_consume_expr_0(ctx);
 }
 
 static bool try_consume_intlit(parse_ctx_t *ctx) {
@@ -438,7 +444,8 @@ static bool try_consume_expr_3(parse_ctx_t *ctx) {
         || try_consume_address_of(ctx)
         || try_consume_cast(ctx)
         || try_consume_parens(ctx)
-        || try_consume_lhs(ctx)
+        || try_consume_identifier(ctx)
+        // || try_consume_lhs(ctx)
         || try_consume_intlit(ctx)
         || try_consume_stringlit(ctx)
         || try_consume_charlit(ctx);
@@ -727,6 +734,72 @@ static bool try_consume_gt(parse_ctx_t *ctx) {
     return parsed;
 }
 
+static bool try_consume_lt(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_LT, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t lt_node = {
+            .type = NODE_LT,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &lt_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_lt succeeded\n");
+    }
+    return parsed;
+}
+
+static bool try_consume_lte(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_LTE, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t lte_node = {
+            .type = NODE_LTE,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &lte_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_lte succeeded\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_expr_0(parse_ctx_t *ctx) {
     if (!try_consume_expr_1(ctx)) {
         return false;
@@ -746,6 +819,12 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
             continue;
         }
         if (try_consume_gt(ctx)) {
+            continue;
+        }
+        if (try_consume_lt(ctx)) {
+            continue;
+        }
+        if (try_consume_lte(ctx)) {
             continue;
         }
         break;

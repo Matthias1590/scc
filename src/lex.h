@@ -31,6 +31,8 @@ typedef enum {
     TOKEN_EQEQ,
     TOKEN_WHILE,
     TOKEN_GT,
+    TOKEN_LT,
+    TOKEN_LTE,
     TOKEN_PLUSEQ,
 } token_type_t;
 

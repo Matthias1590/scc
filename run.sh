@@ -16,7 +16,10 @@ cd "$SRC_FOLDER"
 
 set -e
 
-make -C "$CURRENT_DIR"
+if [ -z "$2" ]; then
+    make -B -C "$CURRENT_DIR"
+fi
+
 "$CURRENT_DIR"/scc "$SRC_NAME"
 
 "$QBE" -o out.s out.qbe

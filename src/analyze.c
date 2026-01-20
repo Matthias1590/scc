@@ -527,17 +527,17 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				return false;
 			}
 			qbe_var_t left_var = ctx->result_var;
-			type_t left_type = ctx->result_type;
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
 				return false;
 			}
 			qbe_var_t right_var = ctx->result_var;
+			type_t right_type = ctx->result_type;
 
 			// TODO: Ensure left_type and right_type are compatible
 
 			fprintf(ctx->out_file, "    ");
 			fprintf(ctx->out_file, "store");
-			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_type(ctx, qbe_type_from_type(right_type));
 			qbe_write_var(ctx, right_var);
 			fprintf(ctx->out_file, ", ");
 			qbe_write_var(ctx, left_var);
@@ -936,10 +936,23 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			if (!analyze_node(ctx, symbol_maps, node->as.deref.expr_ref, false, scope_depth)) {
 				return false;
 			}
+
+			if (emit_lvalue) {
+				// Don't dereference if we want the lvalue
+				return true;
+			}
+
 			qbe_var_t ptr_var = ctx->result_var;
 			qbe_value_type_t result_type = qbe_type_from_type(ctx->result_type);
 
 			qbe_var_t result_var = ctx_new_temp(ctx, result_type);
+
+			ctx->result_var = result_var;
+			if (ctx->result_type.pointer_depth == 0) {
+				report_error(node->source_loc, "Cannot dereference non-pointer type");
+			}
+			ctx->result_type.pointer_depth--;
+
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
@@ -948,12 +961,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_write_type(ctx, result_type);
 			qbe_write_var(ctx, ptr_var);
 			fprintf(ctx->out_file, "\n");
-
-			ctx->result_var = result_var;
-			if (ctx->result_type.pointer_depth == 0) {
-				report_error(node->source_loc, "Cannot dereference non-pointer type");
-			}
-			ctx->result_type.pointer_depth--;
 		} break;
 		case NODE_NEQ: {
 			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
@@ -1079,8 +1086,10 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_var_t result_var = ctx_new_temp(ctx, return_qbe_type);
 
 			fprintf(ctx->out_file, "    ");
-			qbe_write_var(ctx, result_var);
-			fprintf(ctx->out_file, " =");
+			if (return_qbe_type != QBE_VALUE_VOID) {
+				qbe_write_var(ctx, result_var);
+				fprintf(ctx->out_file, " =");
+			}
 			qbe_write_type(ctx, return_qbe_type);
 			fprintf(ctx->out_file, "call ");
 			qbe_write_var(ctx, function_var);
@@ -1246,6 +1255,38 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, " =");
 			qbe_write_type(ctx, QBE_VALUE_WORD);
 			fprintf(ctx->out_file, "csgt");  // TODO: Handle signed vs unsigned
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_var(ctx, left_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, right_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = int_type;
+		} break;
+		case NODE_LTE: {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t left_var = ctx->result_var;
+			type_t left_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t right_var = ctx->result_var;
+			type_t right_type = ctx->result_type;
+
+			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
+			if (!type_eq(left_type, right_type)) {
+				todo("Type mismatch in LTE operation");
+			}
+
+			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "csle");  // TODO: Handle signed vs unsigned
 			qbe_write_type(ctx, qbe_type_from_type(left_type));
 			qbe_write_var(ctx, left_var);
 			fprintf(ctx->out_file, ", ");

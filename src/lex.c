@@ -254,6 +254,13 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
         token.type = TOKEN_SLASH;
     } else if (ctx->code_view->string[0] == '>') {
         token.type = TOKEN_GT;
+    } else if (ctx->code_view->string[0] == '<') {
+        if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '=') {
+            token.type = TOKEN_LTE;
+            sv_consume(ctx->code_view, 1); // consume extra '='
+        } else {
+            token.type = TOKEN_LT;
+        }
     } else if (ctx->code_view->string[0] == '(') {
         token.type = TOKEN_LPAREN;
     } else if (ctx->code_view->string[0] == ')') {

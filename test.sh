@@ -1,9 +1,14 @@
 #!/bin/bash
 
+set -e
+make -B
+set +e
+echo 
+
 # Find all .c files in the tests directory
 for file in tests/*.c; do
     # Compile and run using run.sh, redirect stdout but keep stderr
-    ./run.sh "$file" > /dev/null
+    ./run.sh "$file" DONTRUNMAKE > /dev/null
 
     # If the exit code isn't 0, print an error message
     if [ $? -ne 0 ]; then
