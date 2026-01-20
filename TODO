@@ -46,7 +46,7 @@ Codegen:
 
 [*] If statements
 [*] Forward declaration
-[ ] While loops
+[*] While loops
 [ ] Implicit casting
 [-] Int promotion and all that
 This is to get a hello world working.

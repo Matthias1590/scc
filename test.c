@@ -1,11 +1,10 @@
 #include "test.h"
 
 int main(int argc, char **argv) {
-    while (argc != 0)
+    while (*argv)
     {
         puts(*argv);
-        argc = argc - 1;
-        argv = argv + 2;
+        argv = argv + 1;
     }
-    return argc;
+    return 0;
 }
