@@ -58,17 +58,59 @@ static bool try_consume_stringlit(lex_ctx_t *ctx) {
     }
 
     size_t i = 1;
-    while (i < ctx->code_view->length && ctx->code_view->string[i] != '"') {
+    bool escape = false;
+    while (i < ctx->code_view->length) {
+        if (ctx->code_view->string[i] == '"' && !escape) {
+            break;
+        }
+        if (ctx->code_view->string[i] == '\\' && !escape) {
+            escape = true;
+        } else {
+            escape = false;
+        }
         i++;
     }
     if (i >= ctx->code_view->length) {
         report_error(start_loc, "Unterminated string literal");
     }
     i--;
-    
+
     sv_consume(ctx->code_view, 1); // consume opening quote
     sv_t string_sv = sv_consume(ctx->code_view, i); // exclude closing quote
     sv_consume(ctx->code_view, 1); // consume closing quote
+
+    // Handle escape sequences
+    char unescaped[string_sv.length + 1];
+    size_t unescaped_index = 0;
+    for (size_t j = 0; j < string_sv.length; j++) {
+        if (string_sv.string[j] == '\\') {
+            j++;
+            if (j >= string_sv.length) {
+                unreachable();  // TODO: Is this correct? just make sure and remove this todo
+            }
+            switch (string_sv.string[j]) {
+                case 'n':
+                    unescaped[unescaped_index++] = '\n';
+                    break;
+                case 't':
+                    unescaped[unescaped_index++] = '\t';
+                    break;
+                case '\\':
+                    unescaped[unescaped_index++] = '\\';
+                    break;
+                case '"':
+                    unescaped[unescaped_index++] = '"';
+                    break;
+                default:
+                    report_error(start_loc, "Unknown escape sequence: \\%c", string_sv.string[j]);
+            }
+        } else {
+            unescaped[unescaped_index++] = string_sv.string[j];
+        }
+    }
+    unescaped[unescaped_index] = '\0';
+
+    string_sv = (sv_t){ .string = strdup(unescaped), .length = strlen(unescaped) };
 
     token_t token = { .type = TOKEN_STRINGLIT, .source_loc = start_loc, .as.stringlit = string_sv };
     list_push(ctx->tokens, &token);

@@ -4,12 +4,12 @@ char *preprocess_file(const char *in_path) {
     // Run `cpp -x c {PATH} | grep -v "^#"`
     char command[512];
     snprintf(command, sizeof(command), "cpp -x c \"%s\" | grep -v \"^#\"", in_path);
-    
+
     FILE *pipe = popen(command, "r");
     if (pipe == NULL) {
         todo("Handle preprocess error");
     }
-    
+
     char *buf = NULL;
     size_t len = 0;
     FILE *mem = open_memstream(&buf, &len);
