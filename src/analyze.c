@@ -1306,6 +1306,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			type_t expr_type = ctx->result_type;
 
 			// TODO: Also, not sure if its allowed for pointers
+			// TODO: Ensure its not unsigned, what do we do in that case? Change the type?
 			if (!type_is_primitive(expr_type)) {
 				todo("Type mismatch in NEGATE operation");
 			}
