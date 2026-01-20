@@ -20,6 +20,8 @@ make -C "$CURRENT_DIR"
 "$CURRENT_DIR"/scc "$SRC_NAME"
 
 "$QBE" -o out.s out.qbe
-gcc -o "$CURRENT_DIR"/out.out out.s
+gcc -o out.out out.s
 
-"$CURRENT_DIR"/out.out
+set +e
+
+./out.out

@@ -106,64 +106,6 @@ void node_print(node_ref_t ref) {
     }
 }
 
-static char *next_token_display(parse_ctx_t *ctx) {
-    if (ctx->token_view.length == 0) {
-        return "EOF";
-    } else {
-        token_t *token = lv_at(&ctx->token_view, token_t, 0);
-        static char buffer[64];
-        switch (token->type) {
-            case TOKEN_INTLIT:
-                snprintf(buffer, sizeof(buffer), "%d", token->as.intlit);
-                return buffer;
-            case TOKEN_IDENTIFIER:
-                snprintf(buffer, sizeof(buffer), "%s", token->as.identifier);
-                return buffer;
-            case TOKEN_AMPERSAND:
-                return "&";
-            case TOKEN_STAR:
-                return "*";
-            case TOKEN_LPAREN:
-                return "(";
-            case TOKEN_RPAREN:
-                return ")";
-            case TOKEN_PLUS:
-                return "+";
-            case TOKEN_MINUS:
-                return "-";
-            case TOKEN_SEMICOLON:
-                return ";";
-            case TOKEN_EQ:
-                return "=";
-            case TOKEN_COMMA:
-                return ",";
-            case TOKEN_INT:
-                return "int";
-            case TOKEN_FLOAT:
-                return "float";
-            case TOKEN_CHAR:
-                return "char";
-            case TOKEN_VOID:
-                return "void";
-            case TOKEN_RETURN:
-                return "return";
-            case TOKEN_IF:
-                return "if";
-            case TOKEN_NEQ:
-                return "!=";
-            case TOKEN_LBRACE:
-                return "{";
-            case TOKEN_RBRACE:
-                return "}";
-            case TOKEN_SLASH:
-                return "/";
-            default:
-                snprintf(buffer, sizeof(buffer), "TOKEN(%d)", token->type);
-                return buffer;
-        }
-    }
-}
-
 static bool try_consume_stmt(parse_ctx_t *ctx);
 static bool try_consume_block(parse_ctx_t *ctx);
 
@@ -348,8 +290,6 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
 }
 
 static bool try_consume_call(parse_ctx_t *ctx) {
-    printf("next token: %s\n", next_token_display(ctx));
-
     trace("+ try_consume_call\n");
     parse_ctx_t new_ctx = *ctx;
 
@@ -754,6 +694,39 @@ static bool try_consume_eqeq(parse_ctx_t *ctx) {
     return parsed;
 }
 
+static bool try_consume_gt(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_GT, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t gt_node = {
+            .type = NODE_GT,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &gt_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_gt succeeded\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_expr_0(parse_ctx_t *ctx) {
     if (!try_consume_expr_1(ctx)) {
         return false;
@@ -770,6 +743,9 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
             continue;
         }
         if (try_consume_eqeq(ctx)) {
+            continue;
+        }
+        if (try_consume_gt(ctx)) {
             continue;
         }
         break;
@@ -926,6 +902,38 @@ static bool try_consume_if(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_pluseq(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_lhs(&new_ctx)) {
+        return false;
+    }
+    node_ref_t left_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_PLUSEQ, NULL)) {
+        return false;
+    }
+
+    if (!try_consume_expr_0(&new_ctx)) {
+        return false;
+    }
+    node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
+        return false;
+    }
+
+    node_t pluseq_node = {
+        .type = NODE_PLUSEQ,
+        .source_loc = node_ref_get(left_ref)->source_loc,
+        .as.binop.left_ref = left_ref,
+        .as.binop.right_ref = right_ref,
+    };
+    ctx_update(ctx, &new_ctx, &pluseq_node);
+
+    return true;
+}
+
 static bool try_consume_assignment(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -981,6 +989,11 @@ static bool try_consume_discard(parse_ctx_t *ctx) {
 
 static bool try_consume_stmt(parse_ctx_t *ctx) {
     if (try_consume_var_decl(ctx)) {
+        return true;
+    }
+
+    // TODO: This should be an expression, just like assignment, not a statement
+    if (try_consume_pluseq(ctx)) {
         return true;
     }
 

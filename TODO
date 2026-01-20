@@ -52,3 +52,5 @@ Codegen:
 This is to get a hello world working.
 
 [ ] Preprocess manually (OR, fix source locations for now)
+
+[ ] Fix makefile to rebuild when a header file changes

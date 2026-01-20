@@ -31,6 +31,8 @@ typedef enum {
     NODE_FILE,
     NODE_CALL,
     NODE_EQEQ,
+    NODE_GT,
+    NODE_PLUSEQ,
     NODE_DISCARD,
     NODE_WHILE,
 } node_type_t;

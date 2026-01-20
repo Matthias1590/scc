@@ -1179,6 +1179,82 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "copy %d\n", node->as.charlit.as.charlit);
 			ctx->result_type = char_type;
 		} break;
+		case NODE_PLUSEQ: {
+			if (emit_lvalue) {
+				report_error(node->source_loc, "Cannot emit lvalue for += operation");
+			}
+
+			// Generate addition, then write back to lhs
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, true, scope_depth)) {
+				return false;
+			}
+			qbe_var_t left_addr = ctx->result_var;
+			// type_t left_addr_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t left_var = ctx->result_var;
+			type_t left_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t right_var = ctx->result_var;
+			// type_t right_type = ctx->result_type;
+
+			// TODO: Promote if necessary
+
+			qbe_var_t temp = ctx_new_temp(ctx, qbe_type_from_type(left_type));
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, temp);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			fprintf(ctx->out_file, "add ");
+			qbe_write_var(ctx, left_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, right_var);
+			fprintf(ctx->out_file, "\n");
+			fprintf(ctx->out_file, "    ");
+			qbe_write_store_instr(ctx, qbe_type_from_type(left_type));
+			qbe_write_var(ctx, temp);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, left_addr);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = left_var;
+			ctx->result_type = left_type;
+		} break;
+		case NODE_GT: {
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.left_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t left_var = ctx->result_var;
+			type_t left_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.binop.right_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t right_var = ctx->result_var;
+			type_t right_type = ctx->result_type;
+
+			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
+			if (!type_eq(left_type, right_type)) {
+				todo("Type mismatch in GT operation");
+			}
+
+			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, QBE_VALUE_WORD);
+			fprintf(ctx->out_file, "csgt");  // TODO: Handle signed vs unsigned
+			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_var(ctx, left_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, right_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = int_type;
+		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
 	}
