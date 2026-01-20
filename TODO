@@ -50,3 +50,5 @@ Codegen:
 [ ] Implicit casting
 [-] Int promotion and all that
 This is to get a hello world working.
+
+[ ] Preprocess manually (OR, fix source locations for now)

@@ -276,6 +276,27 @@ static bool try_consume_intlit(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_charlit(parse_ctx_t *ctx) {
+    trace("+ try_consume_charlit\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    token_t *charlit_token;
+    if (!try_consume_token(&new_ctx, TOKEN_CHARLIT, &charlit_token)) {
+        trace("- try_consume_charlit: false\n");
+        return false;
+    }
+
+    node_t node = {
+        .type = NODE_CHARLIT,
+        .source_loc = charlit_token->source_loc,
+        .as.charlit = *charlit_token
+    };
+    ctx_update(ctx, &new_ctx, &node);
+
+    trace("- try_consume_charlit: true\n");
+    return true;
+}
+
 static bool try_consume_stringlit(parse_ctx_t *ctx) {
     trace("+ try_consume_stringlit\n");
     parse_ctx_t new_ctx = *ctx;
@@ -479,7 +500,8 @@ static bool try_consume_expr_3(parse_ctx_t *ctx) {
         || try_consume_parens(ctx)
         || try_consume_lhs(ctx)
         || try_consume_intlit(ctx)
-        || try_consume_stringlit(ctx);
+        || try_consume_stringlit(ctx)
+        || try_consume_charlit(ctx);
 }
 
 static bool try_consume_expr_2(parse_ctx_t *ctx) {

@@ -1071,7 +1071,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				type_t *expected_type = list_at(&function_type.as.func.parameter_types, type_t, i);
 				type_t *actual_type = list_at(&arg_types, type_t, i);
 				if (!type_eq(*expected_type, *actual_type)) {
-					todo("Report function argument type mismatch error");
+					report_error(node->source_loc, "Function argument type mismatch");
 				}
 			}
 
@@ -1082,7 +1082,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_write_var(ctx, result_var);
 			fprintf(ctx->out_file, " =");
 			qbe_write_type(ctx, return_qbe_type);
-			fprintf(ctx->out_file, "call ");;
+			fprintf(ctx->out_file, "call ");
 			qbe_write_var(ctx, function_var);
 			fprintf(ctx->out_file, "(");
 			for (size_t i = 0; i < arg_vars.length; i++) {
@@ -1169,6 +1169,15 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			fprintf(ctx->out_file, "    jmp @label_%zu\n", cond_label.label_num);
 			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
+		} break;
+		case NODE_CHARLIT: {
+			ctx->result_var = ctx_new_temp(ctx, QBE_VALUE_SIGNED_BYTE);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, ctx->result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, qbe_basetype_from_type(char_type));
+			fprintf(ctx->out_file, "copy %d\n", node->as.charlit.as.charlit);
+			ctx->result_type = char_type;
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");

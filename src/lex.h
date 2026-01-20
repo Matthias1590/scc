@@ -5,6 +5,7 @@
 typedef enum {
     TOKEN_INTLIT,
     TOKEN_STRINGLIT,
+    TOKEN_CHARLIT,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_STAR,
@@ -44,6 +45,7 @@ typedef struct {
         int intlit;
         char identifier[32];
         sv_t stringlit;
+        char charlit;
     } as;
 } token_t;
 

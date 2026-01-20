@@ -5,6 +5,7 @@
 typedef enum {
     NODE_INTLIT,
     NODE_STRINGLIT,
+    NODE_CHARLIT,
     NODE_ADD,
     NODE_SUB,
     NODE_MULT,
@@ -47,6 +48,7 @@ struct node_t {
     union {
         token_t intlit;
         token_t stringlit;
+        token_t charlit;
         struct {
             node_ref_t left_ref;
             node_ref_t right_ref;

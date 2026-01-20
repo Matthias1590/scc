@@ -50,6 +50,76 @@ static bool try_consume_intlit(lex_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_charlit(lex_ctx_t *ctx) {
+    source_loc_t start_loc = ctx_get_source_loc(ctx);
+
+    if (ctx->code_view->length == 0 || ctx->code_view->string[0] != '\'') {
+        return false;
+    }
+
+    size_t i = 1;
+    bool escape = false;
+    while (i < ctx->code_view->length) {
+        if (ctx->code_view->string[i] == '\'' && !escape) {
+            break;
+        }
+        if (ctx->code_view->string[i] == '\\' && !escape) {
+            escape = true;
+        } else {
+            escape = false;
+        }
+        i++;
+    }
+    if (i >= ctx->code_view->length) {
+        report_error(start_loc, "Unterminated char literal");
+    }
+    i--;
+
+    sv_consume(ctx->code_view, 1); // consume opening quote
+    sv_t string_sv = sv_consume(ctx->code_view, i); // exclude closing quote
+    sv_consume(ctx->code_view, 1); // consume closing quote
+
+    // Handle escape sequences
+    char unescaped[string_sv.length + 1];
+    size_t unescaped_index = 0;
+    for (size_t j = 0; j < string_sv.length; j++) {
+        if (string_sv.string[j] == '\\') {
+            j++;
+            if (j >= string_sv.length) {
+                unreachable();  // TODO: Is this correct? just make sure and remove this todo
+            }
+            switch (string_sv.string[j]) {
+                case 'n':
+                    unescaped[unescaped_index++] = '\n';
+                    break;
+                case 't':
+                    unescaped[unescaped_index++] = '\t';
+                    break;
+                case '\\':
+                    unescaped[unescaped_index++] = '\\';
+                    break;
+                case '"':
+                    unescaped[unescaped_index++] = '"';
+                    break;
+                default:
+                    report_error(start_loc, "Unknown escape sequence: \\%c", string_sv.string[j]);
+            }
+        } else {
+            unescaped[unescaped_index++] = string_sv.string[j];
+        }
+    }
+    unescaped[unescaped_index] = '\0';
+
+    if (strlen(unescaped) != 1) {
+        report_error(start_loc, "Char literal must be a single character");
+    }
+
+    token_t token = { .type = TOKEN_CHARLIT, .source_loc = start_loc, .as.charlit = unescaped[0] };
+    list_push(ctx->tokens, &token);
+
+    return true;
+}
+
 static bool try_consume_stringlit(lex_ctx_t *ctx) {
     source_loc_t start_loc = ctx_get_source_loc(ctx);
 
@@ -235,6 +305,8 @@ bool tokenize(list_t *tokens, sv_t code_view, const char *file_name) {
             continue;
         } else if (try_consume_stringlit(&ctx)) {
             continue;
+        } else if (try_consume_charlit(&ctx)) {
+            continue;
         } else if (try_consume_symbol(&ctx)) {
             continue;
         } else if (try_consume_identifier(&ctx)) {
@@ -318,6 +390,9 @@ void token_print(const token_t *token) {
             break;
         case TOKEN_WHILE:
             printf("WHILE");
+            break;
+        case TOKEN_CHARLIT:
+            printf("CHARLIT('%c')", token->as.charlit);
             break;
         default:
             unreachable();
