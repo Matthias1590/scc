@@ -1,6 +1,7 @@
 .vscode/
 bin/
 scc
-test.out
-test.qbe
-test.s
+*.o
+*.out
+*.s
+*.qbe

@@ -25,9 +25,14 @@ char *preprocess_file(const char *in_path) {
     return buf;
 }
 
-int main(void) {
-    char *in_path = "test.c";
-    char *out_path = "test.qbe";
+int main(int argc, char **argv) {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input-file>\n", argv[0]);
+        return 1;
+    }
+
+    char *in_path = argv[1];
+    char *out_path = "out.qbe";
 
     char *code = preprocess_file(in_path);
     // char *code = read_file(in_path);
