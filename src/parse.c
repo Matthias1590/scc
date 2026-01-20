@@ -199,10 +199,6 @@ static bool try_consume_identifier(parse_ctx_t *ctx) {
     return true;
 }
 
-static bool try_consume_lhs(parse_ctx_t *ctx) {
-    return try_consume_expr_0(ctx);
-}
-
 static bool try_consume_intlit(parse_ctx_t *ctx) {
     trace("+ try_consume_intlit\n");
     parse_ctx_t new_ctx = *ctx;
@@ -394,7 +390,7 @@ static bool try_consume_address_of(parse_ctx_t *ctx) {
         return false;
     }
 
-    if (!try_consume_lhs(&new_ctx)) {
+    if (!try_consume_expr_0(&new_ctx)) {
         trace("- try_consume_address_of: false\n");
         return false;
     }
@@ -421,7 +417,7 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
         return false;
     }
 
-    if (!try_consume_lhs(&new_ctx)) {
+    if (!try_consume_expr_0(&new_ctx)) {
         trace("- try_consume_deref: false\n");
         return false;
     }
@@ -438,14 +434,41 @@ static bool try_consume_deref(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_negate(parse_ctx_t *ctx) {
+    trace("+ try_consume_negate\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    token_t *minus_token;
+    if (!try_consume_token(&new_ctx, TOKEN_MINUS, &minus_token)) {
+        trace("- try_consume_negate: false\n");
+        return false;
+    }
+
+    if (!try_consume_expr_0(&new_ctx)) {
+        trace("- try_consume_negate: false\n");
+        return false;
+    }
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    node_t negate_node = {
+        .type = NODE_NEGATE,
+        .source_loc = minus_token->source_loc,
+        .as.negate.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &negate_node);
+
+    trace("- try_consume_negate: true\n");
+    return true;
+}
+
 static bool try_consume_expr_3(parse_ctx_t *ctx) {
     trace("| try_consume_expr_3\n");
     return try_consume_deref(ctx)
+        || try_consume_negate(ctx)
         || try_consume_address_of(ctx)
         || try_consume_cast(ctx)
         || try_consume_parens(ctx)
         || try_consume_identifier(ctx)
-        // || try_consume_lhs(ctx)
         || try_consume_intlit(ctx)
         || try_consume_stringlit(ctx)
         || try_consume_charlit(ctx);
@@ -984,7 +1007,7 @@ static bool try_consume_if(parse_ctx_t *ctx) {
 static bool try_consume_pluseq(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_lhs(&new_ctx)) {
+    if (!try_consume_expr_0(&new_ctx)) {
         return false;
     }
     node_ref_t left_ref = ctx_get_result_ref(&new_ctx);
@@ -1016,7 +1039,7 @@ static bool try_consume_pluseq(parse_ctx_t *ctx) {
 static bool try_consume_assignment(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
-    if (!try_consume_lhs(&new_ctx)) {
+    if (!try_consume_expr_0(&new_ctx)) {
         return false;
     }
     node_ref_t left_ref = ctx_get_result_ref(&new_ctx);

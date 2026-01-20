@@ -1119,10 +1119,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_var_t right_var = ctx->result_var;
 			type_t right_type = ctx->result_type;
 
-			// TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
-			if (!type_eq(left_type, right_type)) {
-				todo("Type mismatch in EQEQ operation");
-			}
+			// // TODO: Both should be primitives, otherwise you should still get an error (can't compare structs)
+			// if (!type_eq(left_type, right_type)) {
+			// 	todo("Type mismatch in EQEQ operation");
+			// }
+
+			// LEFTOFF: TODO: Promote
 
 			qbe_var_t result_var = ctx_new_temp(ctx, QBE_VALUE_WORD);
 			fprintf(ctx->out_file, "    ");
@@ -1295,6 +1297,30 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 
 			ctx->result_var = result_var;
 			ctx->result_type = int_type;
+		} break;
+		case NODE_NEGATE: {
+			if (!analyze_node(ctx, symbol_maps, node->as.negate.expr_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t expr_var = ctx->result_var;
+			type_t expr_type = ctx->result_type;
+
+			// TODO: Also, not sure if its allowed for pointers
+			if (!type_is_primitive(expr_type)) {
+				todo("Type mismatch in NEGATE operation");
+			}
+
+			qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(expr_type));
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, result_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, qbe_type_from_type(expr_type));
+			fprintf(ctx->out_file, "neg ");
+			qbe_write_var(ctx, expr_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = result_var;
+			ctx->result_type = expr_type;
 		} break;
 		default:
 			todo("Unhandled node type in analyze_node");

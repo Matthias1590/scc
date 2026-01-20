@@ -37,6 +37,7 @@ typedef enum {
     NODE_PLUSEQ,
     NODE_DISCARD,
     NODE_WHILE,
+    NODE_NEGATE,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -103,9 +104,13 @@ struct node_t {
             node_ref_t function_ref;
             list_t arg_refs;
         } call;
+        // TODO: Put these in some unaryop struct
         struct {
             node_ref_t expr_ref;
         } discard;
+        struct {
+            node_ref_t expr_ref;
+        } negate;
         token_t identifier;
         list_t block;
     } as;
