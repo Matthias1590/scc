@@ -9,7 +9,7 @@ Lexing:
 [*] Assignment operator (=)
 [*] Return keyword
 [*] Braces ({, })
-[ ] Strings
+[*] Strings
 
 Parsing:
 [*] Addition
@@ -27,7 +27,7 @@ Parsing:
 [-] Function declaration
 [*] Return statement
 [*] Casting
-[ ] Function call
+[-] Function call
 [*] Pointer types
 
 Refactor:
@@ -47,7 +47,7 @@ Codegen:
 [*] If statements
 [*] Forward declaration
 [*] While loops
-[ ] Implicit casting
+[-] Implicit casting
 [-] Int promotion and all that
 This is to get a hello world working.
 
