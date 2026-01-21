@@ -382,10 +382,18 @@ static void qbe_write_ext_instr(codegen_ctx_t *ctx, type_t type) {
 		case TYPE_LONG:
 			unreachable();
 		case TYPE_CHAR:
-			fprintf(ctx->out_file, "sb ");
+			if (type.is_signed) {
+				fprintf(ctx->out_file, "sb ");
+			} else {
+				fprintf(ctx->out_file, "ub ");
+			}
 			break;
 		case TYPE_INT:
-			fprintf(ctx->out_file, "sw ");
+			if (type.is_signed) {
+				fprintf(ctx->out_file, "sw ");
+			} else {
+				fprintf(ctx->out_file, "uw ");
+			}
 			break;
 	}
 }
