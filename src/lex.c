@@ -192,7 +192,7 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
     source_loc_t start_loc = ctx_get_source_loc(ctx);
 
     size_t i = 0;
-    while (i < ctx->code_view->length && isalpha(ctx->code_view->string[i])) {
+    while (i < ctx->code_view->length && (isalpha(ctx->code_view->string[i]) || ctx->code_view->string[i] == '_')) {
         i++;
     }
     if (i == 0) {
@@ -245,11 +245,18 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
         if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '=') {
             token.type = TOKEN_PLUSEQ;
             sv_consume(ctx->code_view, 1); // consume extra '='
+        } else if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '+') {
+            token.type = TOKEN_INC;
+            sv_consume(ctx->code_view, 1); // consume extra '+'
         } else {
             token.type = TOKEN_PLUS;
         }
     } else if (ctx->code_view->string[0] == '-') {
         token.type = TOKEN_MINUS;
+    } else if (ctx->code_view->string[0] == '[') {
+        token.type = TOKEN_LBRACK;
+    } else if (ctx->code_view->string[0] == ']') {
+        token.type = TOKEN_RBRACK;
     } else if (ctx->code_view->string[0] == '*') {
         token.type = TOKEN_STAR;
     } else if (ctx->code_view->string[0] == '/') {

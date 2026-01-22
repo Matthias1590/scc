@@ -1334,6 +1334,106 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_var = result_var;
 			ctx->result_type = expr_type;
 		} break;
+		case NODE_INDEX: {
+			if (!analyze_node(ctx, symbol_maps, node->as.index.expr_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t array_var = ctx->result_var;
+			type_t array_type = ctx->result_type;
+
+			assert(array_type.pointer_depth > 0 && "Indexing non-pointer type is not implemented yet");
+
+			if (!analyze_node(ctx, symbol_maps, node->as.index.index_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t index_var = ctx->result_var;
+			type_t index_type = ctx->result_type;
+
+			if (!type_is_primitive(index_type) || index_type.pointer_depth != 0) {
+				assert(false && "Index expression must be of primitive non-pointer type, at least for now");
+			}
+
+			// Add and then deref if not lvalue
+			if (!promote_value(ctx, &index_var, &index_type, long_type)) {
+				return false;
+			}
+
+			qbe_var_t element_ptr_var = ctx_new_temp(ctx, QBE_VALUE_LONG);
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, element_ptr_var);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, QBE_VALUE_LONG);
+			fprintf(ctx->out_file, "add ");
+			qbe_write_var(ctx, array_var);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, index_var);
+			fprintf(ctx->out_file, "\n");
+
+			if (emit_lvalue) {
+				// Just return the address
+				ctx->result_var = element_ptr_var;
+				ctx->result_type = (type_t) {
+					.kind = array_type.kind,
+					.pointer_depth = array_type.pointer_depth - 1,
+				};
+			} else {
+				// Deref
+				type_t element_type = (type_t) {
+					.kind = array_type.kind,
+					.pointer_depth = array_type.pointer_depth - 1,
+				};
+				qbe_var_t element_var = ctx_new_temp(ctx, qbe_type_from_type(element_type));
+				fprintf(ctx->out_file, "    ");
+				qbe_write_var(ctx, element_var);
+				fprintf(ctx->out_file, " =");
+				qbe_write_type(ctx, qbe_basetype_from_type(element_type));
+				fprintf(ctx->out_file, "load");
+				qbe_write_type(ctx, qbe_type_from_type(element_type));
+				qbe_write_var(ctx, element_ptr_var);
+				fprintf(ctx->out_file, "\n");
+
+				ctx->result_var = element_var;
+				ctx->result_type = element_type;
+			}
+		} break;
+		case NODE_POSTINC: {
+			if (emit_lvalue) {
+				report_error(node->source_loc, "Cannot emit lvalue for post-increment operation");
+			}
+
+			if (!analyze_node(ctx, symbol_maps, node->as.postinc.expr_ref, true, scope_depth)) {
+				return false;
+			}
+			qbe_var_t addr_var = ctx->result_var;
+			// type_t addr_type = ctx->result_type;
+			if (!analyze_node(ctx, symbol_maps, node->as.postinc.expr_ref, false, scope_depth)) {
+				return false;
+			}
+			qbe_var_t value_var = ctx->result_var;
+			type_t value_type = ctx->result_type;
+
+			qbe_var_t temp = ctx_new_temp(ctx, qbe_type_from_type(value_type));
+			fprintf(ctx->out_file, "    ");
+			qbe_write_var(ctx, temp);
+			fprintf(ctx->out_file, " =");
+			qbe_write_type(ctx, qbe_type_from_type(value_type));
+			fprintf(ctx->out_file, "add ");
+			qbe_write_var(ctx, value_var);
+			fprintf(ctx->out_file, ", 1\n");
+			fprintf(ctx->out_file, "    ");
+			qbe_write_store_instr(ctx, qbe_type_from_type(value_type));
+			qbe_write_var(ctx, temp);
+			fprintf(ctx->out_file, ", ");
+			qbe_write_var(ctx, addr_var);
+			fprintf(ctx->out_file, "\n");
+
+			ctx->result_var = value_var;
+			ctx->result_type = value_type;
+		} break;
+		case NODE_EMPTY_STMT: {
+			ctx->result_var = ctx_null_var;
+			ctx->result_type = void_type;
+		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
 	}

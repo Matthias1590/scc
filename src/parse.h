@@ -38,6 +38,9 @@ typedef enum {
     NODE_DISCARD,
     NODE_WHILE,
     NODE_NEGATE,
+    NODE_INDEX,
+    NODE_POSTINC,
+    NODE_EMPTY_STMT,
 } node_type_t;
 
 typedef struct node_t node_t;
@@ -116,6 +119,13 @@ struct node_t {
         struct {
             bool is_signed;
         } type;
+        struct {
+            node_ref_t expr_ref;
+            node_ref_t index_ref;
+        } index;
+        struct {
+            node_ref_t expr_ref;
+        } postinc;
     } as;
 };
 

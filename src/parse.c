@@ -298,6 +298,50 @@ static bool try_consume_parens(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_index(parse_ctx_t *ctx) {
+    trace("+ try_consume_index\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_LBRACK, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        node_ref_t index_ref;
+        if (!try_consume_expr_0(&new_ctx)) {
+            trace("- try_consume_index: false\n");
+            return false;
+        }
+        index_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t index_node = {
+            .type = NODE_INDEX,
+            .source_loc = source_loc,
+            .as.index = {
+                .expr_ref = left_ref,
+                .index_ref = index_ref,
+            }
+        };
+        ctx_update(ctx, &new_ctx, &index_node);
+        parsed = true;
+    }
+
+    if (!try_consume_token(&new_ctx, TOKEN_RBRACK, NULL)) {
+        trace("- try_consume_index: false\n");
+        return false;
+    }
+
+    if (parsed) {
+        ctx_update(ctx, &new_ctx, node_ref_get(ctx_get_result_ref(&new_ctx)));
+        trace("- try_consume_index: true\n");
+    } else {
+        trace("- try_consume_index: false\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_call(parse_ctx_t *ctx) {
     trace("+ try_consume_call\n");
     parse_ctx_t new_ctx = *ctx;
@@ -481,6 +525,28 @@ static bool try_consume_expr_3(parse_ctx_t *ctx) {
         || try_consume_charlit(ctx);
 }
 
+static bool try_consume_postinc(parse_ctx_t *ctx) {
+    trace("+ try_consume_postinc\n");
+    parse_ctx_t new_ctx = *ctx;
+
+    node_ref_t expr_ref = ctx_get_result_ref(&new_ctx);
+
+    if (!try_consume_token(&new_ctx, TOKEN_INC, NULL)) {
+        trace("- try_consume_postinc: false\n");
+        return false;
+    }
+
+    node_t postinc_node = {
+        .type = NODE_POSTINC,
+        .source_loc = node_ref_get(expr_ref)->source_loc,
+        .as.postinc.expr_ref = expr_ref,
+    };
+    ctx_update(ctx, &new_ctx, &postinc_node);
+
+    trace("- try_consume_postinc: true\n");
+    return true;
+}
+
 static bool try_consume_expr_2(parse_ctx_t *ctx) {
     trace("| try_consume_expr_2\n");
 
@@ -489,9 +555,24 @@ static bool try_consume_expr_2(parse_ctx_t *ctx) {
     }
 
     while (ctx->token_view.length > 0) {
-        if (try_consume_call(ctx)) {
+        if (try_consume_postinc(ctx)) {
             continue;
         }
+
+        while (ctx->token_view.length > 0) {
+            if (try_consume_call(ctx)) {
+                continue;
+            }
+            if (try_consume_index(ctx)) {
+                continue;
+            }
+            break;
+        }
+
+        if (try_consume_postinc(ctx)) {
+            continue;
+        }
+
         break;
     }
 
@@ -1096,7 +1177,26 @@ static bool try_consume_discard(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_empty_stmt(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
+        return false;
+    }
+
+    node_t empty_stmt_node = {
+        .type = NODE_EMPTY_STMT,
+        .source_loc = {0},
+    };
+    ctx_update(ctx, &new_ctx, &empty_stmt_node);
+    return true;
+}
+
 static bool try_consume_stmt(parse_ctx_t *ctx) {
+    if (try_consume_empty_stmt(ctx)) {
+        return true;
+    }
+
     if (try_consume_var_decl(ctx)) {
         return true;
     }
