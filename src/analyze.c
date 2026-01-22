@@ -1300,7 +1300,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, " =");
 			qbe_write_type(ctx, QBE_VALUE_WORD);
 			fprintf(ctx->out_file, "csle");  // TODO: Handle signed vs unsigned
-			qbe_write_type(ctx, qbe_type_from_type(left_type));
+			qbe_write_type(ctx, qbe_basetype_from_type(left_type));
 			qbe_write_var(ctx, left_var);
 			fprintf(ctx->out_file, ", ");
 			qbe_write_var(ctx, right_var);
@@ -1416,7 +1416,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, temp);
 			fprintf(ctx->out_file, " =");
-			qbe_write_type(ctx, qbe_type_from_type(value_type));
+			qbe_write_type(ctx, qbe_basetype_from_type(value_type));
 			fprintf(ctx->out_file, "add ");
 			qbe_write_var(ctx, value_var);
 			fprintf(ctx->out_file, ", 1\n");

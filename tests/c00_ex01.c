@@ -1,24 +1,33 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
-/*   misha.c                                            :+:      :+:    :+:   */
+/*   c00_ex01.c                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
 /*   By: mawijnsm <mawijnsm@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/01/22 17:13:31 by mawijnsm          #+#    #+#             */
-/*   Updated: 2026/01/22 18:40:08 by mawijnsm         ###   ########.fr       */
+/*   Created: 2026/01/19 11:37:07 by mawijnsm          #+#    #+#             */
+/*   Updated: 2026/01/22 18:54:43 by mawijnsm         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-int  ft_strlen(char *str)
+int write(int fd, char *c, int count);
+
+void	ft_print_alphabet()
 {
-    int i = 0;
-    while (str[i++])
-        ;
-    return (i - 1);
+	char	c;
+
+	c = 'a';
+	while (c <= 'z')
+	{
+		write(1, &c, 1);
+		c++;
+	}
 }
 
 int main()
 {
-    return (ft_strlen("sandsojfsfsfsfsfs") != 17);
+    ft_print_alphabet();
+    write(1, "\n", 1);
+
+    return 0;
 }
