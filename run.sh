@@ -17,16 +17,16 @@ cd "$SRC_FOLDER"
 set -e
 
 if [ -z "$2" ]; then
-    make -B -C "$CURRENT_DIR"
+    make -B -C "$CURRENT_DIR" > /dev/null
 else
-    make -C "$CURRENT_DIR"
+    make -C "$CURRENT_DIR" > /dev/null
 fi
 
-"$CURRENT_DIR"/scc "$SRC_NAME"
+"$CURRENT_DIR"/scc "$SRC_NAME" > /dev/null
 
-"$QBE" -o out.s out.qbe
-gcc -o out.out out.s
+"$QBE" -o out.s out.qbe > /dev/null
+gcc -o out.elf out.s > /dev/null
 
 set +e
 
-./out.out
+./out.elf

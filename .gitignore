@@ -1,7 +1,8 @@
 .vscode/
 bin/
+run.out
 scc
 *.o
-*.out
+*.elf
 *.s
 *.qbe
