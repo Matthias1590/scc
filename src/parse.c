@@ -36,67 +36,67 @@ void node_print(node_ref_t ref) {
             token_print(&node->as.intlit);
             break;
         case NODE_ADD:
-            printf("ADD(");
+            fprintf(stderr, "ADD(");
             node_print(node->as.binop.left_ref);
-            printf(", ");
+            fprintf(stderr, ", ");
             node_print(node->as.binop.right_ref);
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_MULT:
-            printf("MULT(");
+            fprintf(stderr, "MULT(");
             node_print(node->as.binop.left_ref);
-            printf(", ");
+            fprintf(stderr, ", ");
             node_print(node->as.binop.right_ref);
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_SUB:
-            printf("SUB(");
+            fprintf(stderr, "SUB(");
             node_print(node->as.binop.left_ref);
-            printf(", ");
+            fprintf(stderr, ", ");
             node_print(node->as.binop.right_ref);
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_DIV:
-            printf("DIV(");
+            fprintf(stderr, "DIV(");
             node_print(node->as.binop.left_ref);
-            printf(", ");
+            fprintf(stderr, ", ");
             node_print(node->as.binop.right_ref);
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_VAR_DECL:
-            printf("VAR_DECL(");
+            fprintf(stderr, "VAR_DECL(");
             node_print(node->as.var_decl.type_ref);
-            printf(", ");
-            printf("IDENTIFIER(%s)", node->as.var_decl.name->as.identifier);
+            fprintf(stderr, ", ");
+            fprintf(stderr, "IDENTIFIER(%s)", node->as.var_decl.name->as.identifier);
             if (!node_ref_is_null(node->as.var_decl.init_expr_ref)) {
-                printf(", ");
+                fprintf(stderr, ", ");
                 node_print(node->as.var_decl.init_expr_ref);
             }
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_BLOCK:
-            printf("BLOCK{");
+            fprintf(stderr, "BLOCK{");
             for (size_t i = 0; i < node->as.block.length; i++) {
                 node_ref_t stmt_ref = *(node_ref_t *)list_at(&node->as.block, node_ref_t, i);
                 node_print(stmt_ref);
                 if (i + 1 < node->as.block.length) {
-                    printf(", ");
+                    fprintf(stderr, ", ");
                 }
             }
-            printf("}");
+            fprintf(stderr, "}");
             break;
         case NODE_INT:
-            printf("INT");
+            fprintf(stderr, "INT");
             break;
         case NODE_FLOAT:
-            printf("FLOAT");
+            fprintf(stderr, "FLOAT");
             break;
         case NODE_ASSIGNMENT:
-            printf("ASSIGNMENT(");
+            fprintf(stderr, "ASSIGNMENT(");
             node_print(node->as.binop.left_ref);
-            printf(", ");
+            fprintf(stderr, ", ");
             node_print(node->as.binop.right_ref);
-            printf(")");
+            fprintf(stderr, ")");
             break;
         case NODE_IDENTIFIER:
             token_print(&node->as.identifier);
@@ -945,6 +945,31 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_array_decl(parse_ctx_t *ctx, node_t *var_decl) {
+    parse_ctx_t new_ctx = *ctx;
+
+    if (!try_consume_token(&new_ctx, TOKEN_LBRACK, NULL)) {
+        return false;
+    }
+
+    node_ref_t expr_ref = {0};
+    if (try_consume_expr_0(&new_ctx)) {
+        expr_ref = ctx_get_result_ref(&new_ctx);
+    }
+
+    if (!try_consume_token(&new_ctx, TOKEN_RBRACK, NULL)) {
+        return false;
+    }
+
+    ctx_update(ctx, &new_ctx, node_ref_get(ctx_get_result_ref(&new_ctx)));
+    *ctx = new_ctx;
+
+    var_decl->as.var_decl.is_array = true;
+    var_decl->as.var_decl.array_size_expr_ref = expr_ref;
+
+    return true;
+}
+
 static bool try_consume_var_decl(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -964,6 +989,9 @@ static bool try_consume_var_decl(parse_ctx_t *ctx) {
         .as.var_decl.type_ref = type_ref,
         .as.var_decl.name = identifier_token,
     };
+
+    try_consume_array_decl(&new_ctx, &var_decl_node);
+    
     if (try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
         ctx_update(ctx, &new_ctx, &var_decl_node);
         return true;

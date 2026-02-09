@@ -343,82 +343,82 @@ bool tokenize(list_t *tokens, sv_t code_view, const char *file_name) {
 void token_print(const token_t *token) {
     switch (token->type) {
         case TOKEN_INTLIT:
-            printf("INTLIT(%d)", token->as.intlit);
+            fprintf(stderr, "INTLIT(%d)", token->as.intlit);
             break;
         case TOKEN_PLUS:
-            printf("PLUS");
+            fprintf(stderr, "PLUS");
             break;
         case TOKEN_MINUS:
-            printf("MINUS");
+            fprintf(stderr, "MINUS");
             break;
         case TOKEN_STAR:
-            printf("STAR");
+            fprintf(stderr, "STAR");
             break;
         case TOKEN_SLASH:
-            printf("SLASH");
+            fprintf(stderr, "SLASH");
             break;
         case TOKEN_LPAREN:
-            printf("LPAREN");
+            fprintf(stderr, "LPAREN");
             break;
         case TOKEN_RPAREN:
-            printf("RPAREN");
+            fprintf(stderr, "RPAREN");
             break;
         case TOKEN_IDENTIFIER:
-            printf("IDENTIFIER(%s)", token->as.identifier);
+            fprintf(stderr, "IDENTIFIER(%s)", token->as.identifier);
             break;
         case TOKEN_INT:
-            printf("INT");
+            fprintf(stderr, "INT");
             break;
         case TOKEN_FLOAT:
-            printf("FLOAT");
+            fprintf(stderr, "FLOAT");
             break;
         case TOKEN_SEMICOLON:
-            printf("SEMICOLON");
+            fprintf(stderr, "SEMICOLON");
             break;
         case TOKEN_LBRACE:
-            printf("LBRACE");
+            fprintf(stderr, "LBRACE");
             break;
         case TOKEN_RBRACE:
-            printf("RBRACE");
+            fprintf(stderr, "RBRACE");
             break;
         case TOKEN_EQ:
-            printf("EQ");
+            fprintf(stderr, "EQ");
             break;
         case TOKEN_AMPERSAND:
-            printf("AMPERSAND");
+            fprintf(stderr, "AMPERSAND");
             break;
         case TOKEN_COMMA:
-            printf("COMMA");
+            fprintf(stderr, "COMMA");
             break;
         case TOKEN_VOID:
-            printf("VOID");
+            fprintf(stderr, "VOID");
             break;
         case TOKEN_RETURN:
-            printf("RETURN");
+            fprintf(stderr, "RETURN");
             break;
         case TOKEN_NEQ:
-            printf("NEQ");
+            fprintf(stderr, "NEQ");
             break;
         case TOKEN_CHAR:
-            printf("CHAR");
+            fprintf(stderr, "CHAR");
             break;
         case TOKEN_IF:
-            printf("IF");
+            fprintf(stderr, "IF");
             break;
         case TOKEN_STRINGLIT:
-            printf("STRINGLIT(\"%.*s\")", (int)token->as.stringlit.length, token->as.stringlit.string);
+            fprintf(stderr, "STRINGLIT(\"%.*s\")", (int)token->as.stringlit.length, token->as.stringlit.string);
             break;
         case TOKEN_LONG:
-            printf("LONG");
+            fprintf(stderr, "LONG");
             break;
         case TOKEN_WHILE:
-            printf("WHILE");
+            fprintf(stderr, "WHILE");
             break;
         case TOKEN_CHARLIT:
-            printf("CHARLIT('%c')", token->as.charlit);
+            fprintf(stderr, "CHARLIT('%c')", token->as.charlit);
             break;
         case TOKEN_GT:
-            printf("GT");
+            fprintf(stderr, "GT");
             break;
         default:
             unreachable();

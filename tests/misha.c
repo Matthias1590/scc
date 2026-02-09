@@ -6,16 +6,19 @@
 /*   By: mawijnsm <mawijnsm@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/01/22 17:13:31 by mawijnsm          #+#    #+#             */
-/*   Updated: 2026/01/22 18:40:08 by mawijnsm         ###   ########.fr       */
+/*   Updated: 2026/02/09 17:42:42 by mawijnsm         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 int  ft_strlen(char *str)
 {
-    int i = 0;
-    while (str[i++])
-        ;
-    return (i - 1);
+    int i;
+
+    i = 0;
+    while (str[i]) {
+        i++;
+    }
+    return (i);
 }
 
 int main()

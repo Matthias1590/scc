@@ -65,6 +65,8 @@ struct node_t {
             node_ref_t type_ref;
             token_t *name;
             node_ref_t init_expr_ref;
+            bool is_array;
+            node_ref_t array_size_expr_ref;
         } var_decl;
         struct {
             node_ref_t signature_ref;
