@@ -40,6 +40,7 @@ typedef enum {
     NODE_NEGATE,
     NODE_INDEX,
     NODE_POSTINC,
+    NODE_BREAK,
     NODE_EMPTY_STMT,
 } node_type_t;
 

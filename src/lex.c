@@ -217,6 +217,8 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
         token.type = TOKEN_VOID;
     } else if (strcmp(buffer, "return") == 0) {
         token.type = TOKEN_RETURN;
+    } else if (strcmp(buffer, "break") == 0) {
+        token.type = TOKEN_BREAK;
     } else if (strcmp(buffer, "char") == 0) {
         token.type = TOKEN_CHAR;
     } else if (strcmp(buffer, "long") == 0) {

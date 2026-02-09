@@ -23,6 +23,7 @@ typedef struct {
 
 void *list_at_raw(list_t *list, size_t index);
 void list_push(list_t *list, void *item);
+void list_pop(list_t *list);
 void list_clear(list_t *list);
 void *lv_at_raw(lv_t *lv, size_t index);
 lv_t lv_from_list(list_t *list);

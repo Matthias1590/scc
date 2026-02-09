@@ -1220,12 +1220,36 @@ static bool try_consume_empty_stmt(parse_ctx_t *ctx) {
     return true;
 }
 
+static bool try_consume_break(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    token_t *break_token;
+    if (!try_consume_token(&new_ctx, TOKEN_BREAK, &break_token)) {
+        return false;
+    }
+
+    if (!try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
+        return false;
+    }
+
+    node_t break_node = {
+        .type = NODE_BREAK,
+        .source_loc = break_token->source_loc,
+    };
+    ctx_update(ctx, &new_ctx, &break_node);
+    return true;
+}
+
 static bool try_consume_stmt(parse_ctx_t *ctx) {
     if (try_consume_empty_stmt(ctx)) {
         return true;
     }
 
     if (try_consume_var_decl(ctx)) {
+        return true;
+    }
+
+    if (try_consume_break(ctx)) {
         return true;
     }
 

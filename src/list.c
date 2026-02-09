@@ -16,6 +16,11 @@ void list_push(list_t *list, void *item) {
     list->length++;
 }
 
+void list_pop(list_t *list) {
+    assert(list->length > 0);
+    list->length--;
+}
+
 void list_clear(list_t *list) {
     free(list->element_bytes);
     list->element_bytes = NULL;

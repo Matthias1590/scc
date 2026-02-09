@@ -316,6 +316,11 @@ typedef struct {
 } readonly_value_t;
 
 typedef struct {
+	qbe_label_t continue_label;
+	qbe_label_t break_label;
+} loop_t;
+
+typedef struct {
 	FILE *out_file;
 	qbe_var_t result_var;
 	type_t result_type;
@@ -323,6 +328,7 @@ typedef struct {
 	size_t next_label;
 	size_t next_temp;
 	list_t readonly_values;
+	list_t loop_stack;
 } codegen_ctx_t;
 
 static qbe_var_t ctx_new_temp(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
@@ -1039,6 +1045,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
 			fprintf(ctx->out_file, "    jmp @end\n");
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
 		} break;
 		case NODE_CAST: {
 			if (!analyze_node(ctx, symbol_maps, node->as.cast.expr_ref, false, scope_depth)) {
@@ -1307,12 +1314,18 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			qbe_label_t start_label = ctx_new_label(ctx);
 			qbe_label_t end_label = ctx_new_label(ctx);
 
+			loop_t loop = {
+				.continue_label = cond_label,
+				.break_label = end_label,
+			};
+			list_push(&ctx->loop_stack, &loop);
+
 			fprintf(ctx->out_file, "@label_%zu\n", cond_label.label_num);
 			// TODO: Ensure expr_ref evaluates to an int/bool or whatever, at least not void or something
 			if (!analyze_node(ctx, symbol_maps, node->as.while_.expr_ref, false, scope_depth)) {
 				return false;
 			}
-			fprintf(ctx->out_file, "    jnz");
+			fprintf(ctx->out_file, "    jnz ");
 			qbe_write_var(ctx, ctx->result_var);
 			fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", start_label.label_num, end_label.label_num);
 			fprintf(ctx->out_file, "@label_%zu\n", start_label.label_num);
@@ -1321,6 +1334,8 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			fprintf(ctx->out_file, "    jmp @label_%zu\n", cond_label.label_num);
 			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
+
+			list_pop(&ctx->loop_stack);
 		} break;
 		case NODE_CHARLIT: {
 			ctx->result_var = ctx_new_temp(ctx, QBE_VALUE_SIGNED_BYTE);
@@ -1555,6 +1570,15 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_var = ctx_null_var;
 			ctx->result_type = void_type;
 		} break;
+		case NODE_BREAK: {
+			qbe_label_t break_label = list_at(&ctx->loop_stack, loop_t, ctx->loop_stack.length - 1)->break_label;
+
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", break_label.label_num);
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			ctx->result_var = ctx_null_var;
+			ctx->result_type = void_type;
+		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
 	}
@@ -1571,6 +1595,7 @@ bool analyze(node_ref_t root_ref, const char *out_path) {
 	codegen_ctx_t ctx = {
 		.out_file = out_file,
 		.readonly_values = { .element_size = sizeof(readonly_value_t) },
+		.loop_stack = { .element_size = sizeof(loop_t) },
 	};
 
 	list_t symbol_maps = { .element_size = sizeof(list_t) };
