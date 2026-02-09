@@ -991,7 +991,7 @@ static bool try_consume_var_decl(parse_ctx_t *ctx) {
     };
 
     try_consume_array_decl(&new_ctx, &var_decl_node);
-    
+
     if (try_consume_token(&new_ctx, TOKEN_SEMICOLON, NULL)) {
         ctx_update(ctx, &new_ctx, &var_decl_node);
         return true;
@@ -1343,19 +1343,34 @@ bool try_consume_function_signature(parse_ctx_t *ctx) {
     }
 
     list_t parameters = { .element_size = sizeof(node_ref_t) };
-    while (true) {
-        if (!try_consume_param(&new_ctx)) {
-            break;
+
+    // f(void) case
+    if (
+        new_ctx.token_view.length > 0 && lv_at(&new_ctx.token_view, token_t, 0)->type == TOKEN_VOID
+        && new_ctx.token_view.length > 1 && lv_at(&new_ctx.token_view, token_t, 1)->type == TOKEN_RPAREN
+    ) {
+        try_consume_token(&new_ctx, TOKEN_VOID, NULL);
+    } else {
+        bool trailing_comma = false;
+        while (true) {
+            if (!try_consume_param(&new_ctx)) {
+                break;
+            }
+            trailing_comma = false;
+
+            node_ref_t param_ref = ctx_get_result_ref(&new_ctx);
+            list_push(&parameters, &param_ref);
+
+            if (!try_consume_token(&new_ctx, TOKEN_COMMA, NULL)) {
+                break;
+            }
+            trailing_comma = true;
         }
-
-        node_ref_t param_ref = ctx_get_result_ref(&new_ctx);
-        list_push(&parameters, &param_ref);
-
-        // TODO: This allows for a trailing comma, not what we want, but low priority
-        if (!try_consume_token(&new_ctx, TOKEN_COMMA, NULL)) {
-            break;
+        if (trailing_comma) {
+            return false;
         }
     }
+
     func_sig_node.as.function_signature.parameters = parameters;
 
     if (!try_consume_token(&new_ctx, TOKEN_RPAREN, NULL)) {
