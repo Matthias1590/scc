@@ -33,10 +33,24 @@
         abort(); \
     } while (0)
 
+// TODO: DEPRECATE
 #define report_error(source_loc, msg, ...) \
     do { \
         fprintf(stderr, "%s:%zu:%zu: " msg "\n", \
                 source_loc.file_name, source_loc.line, source_loc.column, ##__VA_ARGS__); \
+        abort(); \
+    } while (0)
+
+#define report_start(source_loc, msg, ...) \
+    fprintf(stderr, "%s:%zu:%zu: " msg, \
+            source_loc.file_name, source_loc.line, source_loc.column, ##__VA_ARGS__)
+
+#define report_line(msg, ...) \
+    fprintf(stderr, "    " msg, ##__VA_ARGS__)
+
+#define report_end() \
+    do { \
+        fflush(stderr); \
         abort(); \
     } while (0)
 

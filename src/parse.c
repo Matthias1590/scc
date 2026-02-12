@@ -1361,17 +1361,18 @@ static bool try_consume_param(parse_ctx_t *ctx) {
     }
     node_ref_t type_ref = ctx_get_result_ref(&new_ctx);
 
-    token_t *identifier_token;
-    if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &identifier_token)) {
-        return false;
-    }
-
     node_t param_node = {
         .type = NODE_VAR_DECL,
         .source_loc = node_ref_get(type_ref)->source_loc,
         .as.var_decl.type_ref = type_ref,
-        .as.var_decl.name = identifier_token,
     };
+
+    if (!try_consume_token(&new_ctx, TOKEN_IDENTIFIER, &param_node.as.var_decl.name)) {
+        return false;
+    }
+
+    try_consume_array_decl(&new_ctx, &param_node);
+
     ctx_update(ctx, &new_ctx, &param_node);
 
     trace("try_consume_param succeeded\n");

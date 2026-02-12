@@ -157,6 +157,8 @@ static type_t type_array_of(type_t inner, node_ref_t size_expr_ref) {
 	return array_type;
 }
 
+static type_t type_from_var_decl(node_t *var_decl, bool is_param);
+
 static type_t type_from_node(node_t *node) {
 	switch (node->type) {
 	case NODE_INT:
@@ -188,7 +190,7 @@ static type_t type_from_node(node_t *node) {
 			if (param_node->as.var_decl.is_varargs) {
 				param_type.kind = TYPE_VARARGS;
 			} else {
-				param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+				param_type = type_from_var_decl(param_node, true);
 			}
 			list_push(&parameter_types, &param_type);
 		}
@@ -204,6 +206,22 @@ static type_t type_from_node(node_t *node) {
 	default:
 		todo("Unhandled type conversion from node to type");
 	}
+}
+
+static type_t type_from_var_decl(node_t *var_decl, bool is_param) {
+	assert(var_decl->type == NODE_VAR_DECL);
+
+	// TODO: We can handle array types here as well
+	if (var_decl->as.var_decl.is_varargs) {
+		return (type_t) {
+			.kind = TYPE_VARARGS
+		};
+	}
+	if (var_decl->as.var_decl.is_array && is_param) {
+		return type_ptr_to(type_from_node(node_ref_get(var_decl->as.var_decl.type_ref)));
+	}
+
+	return type_from_node(node_ref_get(var_decl->as.var_decl.type_ref));
 }
 
 typedef enum {
@@ -638,6 +656,7 @@ static bool mult_by_ptr_size(codegen_ctx_t *ctx, qbe_var_t *var, type_t ptr_type
 	return true;
 }
 
+// Promote right operand so it can be added to a pointer of type left_type
 static bool promote_pointer(codegen_ctx_t *ctx, type_t left_type, qbe_var_t *right_var, type_t *right_type) {
 	assert(left_type.kind == TYPE_PTR);
 
@@ -705,18 +724,20 @@ static size_t num_required_args(type_t func_type) {
 	return func_type.as.func.parameter_types.length;
 }
 
-// TODO: Use this instead of type_from_node where possible
-static type_t type_from_var_decl(node_t *var_decl) {
-	assert(var_decl->type == NODE_VAR_DECL);
+static bool implicit_cast(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
+	(void)ctx;
 
-	// TODO: We can handle array types here as well
-	if (var_decl->as.var_decl.is_varargs) {
-		return (type_t) {
-			.kind = TYPE_VARARGS
-		};
+	// Array -> pointer
+	if (var_type->kind == TYPE_ARRAY && to_type.kind == TYPE_PTR) {
+		// Only allowed if they inner types are the same
+		if (!type_eq(type_deref(*var_type), type_deref(to_type))) {
+			return false;
+		}
+		var->value_type = qbe_type_from_type(to_type);
+		*var_type = to_type;
+		return true;
 	}
-
-	return type_from_node(node_ref_get(var_decl->as.var_decl.type_ref));
+	return false;
 }
 
 // TODO: Refactor so this takes a pointer to qbe_var_t and type_t and modifies them in place instead of through ctx
@@ -740,7 +761,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 			return true;
 		case NODE_VAR_DECL: {
-			type_t type = type_from_node(node_ref_get(node->as.var_decl.type_ref));
+			type_t type = type_from_var_decl(node, false);
 			if (node->as.var_decl.is_array) {
 				if (node_ref_is_null(node->as.var_decl.array_size_expr_ref)) {
 					report_error(node->source_loc, "Array size must be specified for arrays declared on the stack");
@@ -989,7 +1010,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
 				node_t *param_node = node_ref_get(*param_ref);
-				type_t param_type = type_from_var_decl(param_node);
+				type_t param_type = type_from_var_decl(param_node, true);
 
 				if (i > 0) {
 					fprintf(ctx->out_file, ", ");
@@ -1016,7 +1037,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
 				node_t *param_node = node_ref_get(*param_ref);
-				type_t param_type = type_from_var_decl(param_node);
+				type_t param_type = type_from_var_decl(param_node, true);
 
 				if (param_type.kind == TYPE_VARARGS) {
 					// LEFTOFF
@@ -1275,7 +1296,19 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				type_t *expected_type = list_at(&function_type.as.func.parameter_types, type_t, i);
 				type_t *actual_type = list_at(&provided_arg_types, type_t, i);
 				if (!type_eq(*expected_type, *actual_type)) {
-					report_error(node->source_loc, "Function argument type mismatch for argument at index %zu", i);
+					// Try to implicitly cast
+					if (implicit_cast(ctx, list_at(&arg_vars, qbe_var_t, i), actual_type, *expected_type)) {
+						continue;
+					}
+
+					report_start(node->source_loc, "Function argument type mismatch for argument at index %zu\n", i);
+					report_line("    Expected type: ");
+					type_print(*expected_type);
+					fprintf(stderr, "\n");
+					report_line("    Provided type: ");
+					type_print(*actual_type);
+					fprintf(stderr, "\n");
+					report_end();
 				}
 			}
 
@@ -1515,10 +1548,6 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			type_t array_type = ctx->result_type;
 
 			if (array_type.kind != TYPE_PTR && array_type.kind != TYPE_ARRAY) {
-				node_print(node->as.index.expr_ref);
-				fprintf(stderr, "\n");
-				type_print(array_type);
-				fprintf(stderr, "\n");
 				report_error(node->source_loc, "Can only index pointer or array types");
 			}
 
