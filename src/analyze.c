@@ -215,6 +215,7 @@ typedef enum {
 } qbe_var_type_t;
 
 typedef enum {
+	QBE_VALUE_VARARGS,
 	QBE_VALUE_VOID,
 	QBE_VALUE_WORD,
 	QBE_VALUE_UNSIGNED_WORD,
@@ -247,6 +248,8 @@ qbe_var_t ctx_null_var = {
 
 static qbe_value_type_t qbe_type_from_type(type_t type) {
 	switch (type.kind) {
+	case TYPE_VARARGS:
+		return QBE_VALUE_VARARGS;
 	case TYPE_INT:
 		return QBE_VALUE_WORD;
 	case TYPE_UNSIGNED_INT:
@@ -376,6 +379,9 @@ static qbe_label_t ctx_new_label(codegen_ctx_t *ctx) {
 static void qbe_write_type(codegen_ctx_t *ctx, qbe_value_type_t value_type) {
 	switch (value_type) {
 		case QBE_VALUE_VOID:
+		break;
+		case QBE_VALUE_VARARGS:
+			fprintf(ctx->out_file, "...");
 			break;
 		case QBE_VALUE_UNSIGNED_WORD:
 		case QBE_VALUE_WORD:
@@ -699,6 +705,20 @@ static size_t num_required_args(type_t func_type) {
 	return func_type.as.func.parameter_types.length;
 }
 
+// TODO: Use this instead of type_from_node where possible
+static type_t type_from_var_decl(node_t *var_decl) {
+	assert(var_decl->type == NODE_VAR_DECL);
+
+	// TODO: We can handle array types here as well
+	if (var_decl->as.var_decl.is_varargs) {
+		return (type_t) {
+			.kind = TYPE_VARARGS
+		};
+	}
+
+	return type_from_node(node_ref_get(var_decl->as.var_decl.type_ref));
+}
+
 // TODO: Refactor so this takes a pointer to qbe_var_t and type_t and modifies them in place instead of through ctx
 bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, bool emit_lvalue, size_t scope_depth) {
 	node_t *node = node_ref_get(node_ref);
@@ -969,23 +989,25 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
 				node_t *param_node = node_ref_get(*param_ref);
-				type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+				type_t param_type = type_from_var_decl(param_node);
 
 				if (i > 0) {
 					fprintf(ctx->out_file, ", ");
 				}
 				qbe_write_type(ctx, qbe_type_from_type(param_type));
-				qbe_write_var(ctx, (qbe_var_t) {
-					.global = false,
-					.var_type = QBE_VAR_PARAM,
-					.as.param = param_node->as.var_decl.name->as.identifier,
-				});
+				if (param_type.kind != TYPE_VARARGS) {
+					qbe_write_var(ctx, (qbe_var_t) {
+						.global = false,
+						.var_type = QBE_VAR_PARAM,
+						.as.param = param_node->as.var_decl.name->as.identifier,
+					});
 
-				add_symbol(symbol_maps, (symbol_t) {
-					.name = param_node->as.var_decl.name,
-					.type = param_type,
-					.global = false,
-				});
+					add_symbol(symbol_maps, (symbol_t) {
+						.name = param_node->as.var_decl.name,
+						.type = param_type,
+						.global = false,
+					});
+				}
 			}
 			fprintf(ctx->out_file, ")\n{\n");
 			fprintf(ctx->out_file, "@start\n");
@@ -994,33 +1016,38 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			for (size_t i = 0; i < signature_node->as.function_signature.parameters.length; i++) {
 				node_ref_t *param_ref = list_at(&signature_node->as.function_signature.parameters, node_ref_t, i);
 				node_t *param_node = node_ref_get(*param_ref);
-				type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+				type_t param_type = type_from_var_decl(param_node);
 
-				qbe_var_t param_var = (qbe_var_t) {
-					.global = false,
-					.var_type = QBE_VAR_IDENTIFIER,
-					.value_type = qbe_type_from_type(param_type),
-					.as.identifier = {
-						.name = param_node->as.var_decl.name->as.identifier,
-						.scope_depth = scope_depth + 1,
-					},
-				};
-				qbe_var_t param_input_var = (qbe_var_t) {
-					.global = false,
-					.var_type = QBE_VAR_PARAM,
-					.value_type = qbe_type_from_type(param_type),
-					.as.param = param_node->as.var_decl.name->as.identifier,
-				};
-
-				fprintf(ctx->out_file, "    ");
-				qbe_write_var(ctx, param_var);
-				fprintf(ctx->out_file, " =l alloc4 %zu\n", type_size(param_type));
-				fprintf(ctx->out_file, "    ");
-				qbe_write_store_instr(ctx, qbe_basetype_from_type(param_type));
-				qbe_write_var(ctx, param_input_var);
-				fprintf(ctx->out_file, ", ");
-				qbe_write_var(ctx, param_var);
-				fprintf(ctx->out_file, "\n");
+				if (param_type.kind == TYPE_VARARGS) {
+					// LEFTOFF
+					// TODO: Do we need to copy varargs to stack or something?
+				} else {
+					qbe_var_t param_var = (qbe_var_t) {
+						.global = false,
+						.var_type = QBE_VAR_IDENTIFIER,
+						.value_type = qbe_type_from_type(param_type),
+						.as.identifier = {
+							.name = param_node->as.var_decl.name->as.identifier,
+							.scope_depth = scope_depth + 1,
+						},
+					};
+					qbe_var_t param_input_var = (qbe_var_t) {
+						.global = false,
+						.var_type = QBE_VAR_PARAM,
+						.value_type = qbe_type_from_type(param_type),
+						.as.param = param_node->as.var_decl.name->as.identifier,
+					};
+	
+					fprintf(ctx->out_file, "    ");
+					qbe_write_var(ctx, param_var);
+					fprintf(ctx->out_file, " =l alloc4 %zu\n", type_size(param_type));
+					fprintf(ctx->out_file, "    ");
+					qbe_write_store_instr(ctx, qbe_basetype_from_type(param_type));
+					qbe_write_var(ctx, param_input_var);
+					fprintf(ctx->out_file, ", ");
+					qbe_write_var(ctx, param_var);
+					fprintf(ctx->out_file, "\n");
+				}
 			}
 
 			// Body, we don't increment scope_depth because the block node does that already
