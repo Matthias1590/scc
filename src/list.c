@@ -21,6 +21,14 @@ void list_pop(list_t *list) {
     list->length--;
 }
 
+void list_remove(list_t *list, size_t index) {
+    assert(index < list->length);
+    if (index < list->length - 1) {
+        memmove(list_at_raw(list, index), list_at_raw(list, index + 1), (list->length - index - 1) * list->element_size);
+    }
+    list->length--;
+}
+
 void list_clear(list_t *list) {
     free(list->element_bytes);
     list->element_bytes = NULL;

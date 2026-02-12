@@ -43,6 +43,20 @@ int main(int argc, char **argv) {
         todo("Handle tokenization error");
     }
 
+    // Remove "restrict" and "const" tokens for now
+    for (size_t i = 0; i < tokens.length; ) {
+        token_t *token = list_at(&tokens, token_t, i);
+        if (token->type != TOKEN_IDENTIFIER) {
+            i++;
+            continue;
+        }
+        if (strcmp(token->as.identifier, "restrict") == 0 || strcmp(token->as.identifier, "const") == 0) {
+            list_remove(&tokens, i);
+        } else {
+            i++;
+        }
+    }
+
     // for (size_t i = 0; i < tokens.length; i++) {
     //     token_print(list_at(&tokens, token_t, i));
     //     printf("\n");
