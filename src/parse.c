@@ -812,6 +812,39 @@ static bool try_consume_eqeq(parse_ctx_t *ctx) {
     return parsed;
 }
 
+static bool try_consume_andand(parse_ctx_t *ctx) {
+    parse_ctx_t new_ctx = *ctx;
+
+    bool parsed = false;
+
+    node_ref_t left_ref;
+    source_loc_t source_loc = node_ref_get(ctx_get_result_ref(&new_ctx))->source_loc;
+    while (try_consume_token(&new_ctx, TOKEN_ANDAND, NULL)) {
+        left_ref = ctx_get_result_ref(&new_ctx);
+
+        if (!try_consume_expr_1(&new_ctx)) {
+            return false;
+        }
+        node_ref_t right_ref = ctx_get_result_ref(&new_ctx);
+
+        node_t andand_node = {
+            .type = NODE_ANDAND,
+            .source_loc = source_loc,
+            .as.binop = {
+                .left_ref = left_ref,
+                .right_ref = right_ref
+            }
+        };
+        ctx_update(ctx, &new_ctx, &andand_node);
+        parsed = true;
+    }
+
+    if (parsed) {
+        trace("try_consume_andand succeeded\n");
+    }
+    return parsed;
+}
+
 static bool try_consume_gt(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
@@ -927,6 +960,9 @@ static bool try_consume_expr_0(parse_ctx_t *ctx) {
             continue;
         }
         if (try_consume_eqeq(ctx)) {
+            continue;
+        }
+        if (try_consume_andand(ctx)) {
             continue;
         }
         if (try_consume_gt(ctx)) {

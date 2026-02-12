@@ -1,14 +1,18 @@
 #define WIDTH 80
 #define STEPS 100
 
+void *calloc(unsigned long num, unsigned long size);
+void free(void *ptr);
+int putchar(char c);
+
 int rule110(int l, int c, int r) {
-    if (l == 1 && c == 1 && r == 1) return 0;
-    if (l == 1 && c == 1 && r == 0) return 1;
-    if (l == 1 && c == 0 && r == 1) return 1;
-    if (l == 1 && c == 0 && r == 0) return 0;
-    if (l == 0 && c == 1 && r == 1) return 1;
-    if (l == 0 && c == 1 && r == 0) return 1;
-    if (l == 0 && c == 0 && r == 1) return 1;
+    if ((l == 1) && (c == 1) && (r == 1)) return 0;
+    if ((l == 1) && (c == 1) && (r == 0)) return 1;
+    if ((l == 1) && (c == 0) && (r == 1)) return 1;
+    if ((l == 1) && (c == 0) && (r == 0)) return 0;
+    if ((l == 0) && (c == 1) && (r == 1)) return 1;
+    if ((l == 0) && (c == 1) && (r == 0)) return 1;
+    if ((l == 0) && (c == 0) && (r == 1)) return 1;
     return 0; // 000
 }
 
@@ -37,11 +41,11 @@ int main() {
             else
                 left = current[i - 1];
 
-            if (i == WIDTH - 1)
+            if (i == (WIDTH - 1))
                 right = current[0];
             else
                 right = current[i + 1];
-
+                
             next[i] = rule110(left, current[i], right);
         }
 
@@ -49,7 +53,7 @@ int main() {
             current[i] = next[i];
     }
 
-    free(current);
-    free(next);
+    free((void *)current);
+    free((void *)next);
     return 0;
 }

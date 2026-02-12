@@ -192,7 +192,7 @@ static bool try_consume_identifier(lex_ctx_t *ctx) {
     source_loc_t start_loc = ctx_get_source_loc(ctx);
 
     size_t i = 0;
-    while (i < ctx->code_view->length && (isalpha(ctx->code_view->string[i]) || ctx->code_view->string[i] == '_')) {
+    while (i < ctx->code_view->length && (isalpha(ctx->code_view->string[i]) || ctx->code_view->string[i] == '_' || (i > 0 && isdigit(ctx->code_view->string[i])))) {
         i++;
     }
     if (i == 0) {
@@ -294,7 +294,12 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
             token.type = TOKEN_EQ;
         }
     } else if (ctx->code_view->string[0] == '&') {
-        token.type = TOKEN_AMPERSAND;
+         if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '&') {
+            token.type = TOKEN_ANDAND;
+            sv_consume(ctx->code_view, 1); // consume extra '&'
+        } else {
+            token.type = TOKEN_AMPERSAND;
+        }
     } else if (ctx->code_view->string[0] == ',') {
         token.type = TOKEN_COMMA;
     } else if (ctx->code_view->string[0] == '!') {
@@ -438,6 +443,45 @@ void token_print(const token_t *token) {
             break;
         case TOKEN_GT:
             fprintf(stderr, "GT");
+            break;
+        case TOKEN_EQEQ:
+            fprintf(stderr, "EQEQ");
+            break;
+        case TOKEN_LT:
+            fprintf(stderr, "LT");
+            break;
+        case TOKEN_LTE:
+            fprintf(stderr, "LTE");
+            break;
+        case TOKEN_PLUSEQ:
+            fprintf(stderr, "PLUSEQ");
+            break;
+        case TOKEN_UNSIGNED:
+            fprintf(stderr, "UNSIGNED");
+            break;
+        case TOKEN_LBRACK:
+            fprintf(stderr, "LBRACK");
+            break;
+        case TOKEN_RBRACK:  
+            fprintf(stderr, "RBRACK");
+            break;
+        case TOKEN_INC:
+            fprintf(stderr, "INC");
+            break;
+        case TOKEN_BREAK:
+            fprintf(stderr, "BREAK");
+            break;
+        case TOKEN_CONTINUE:
+            fprintf(stderr, "CONTINUE");
+            break;
+        case TOKEN_DOTS:
+            fprintf(stderr, "DOTS");
+            break;
+        case TOKEN_ANDAND:
+            fprintf(stderr, "ANDAND");
+            break;
+        case TOKEN_FOR:
+            fprintf(stderr, "FOR");
             break;
         default:
             unreachable();

@@ -29,6 +29,7 @@ typedef enum {
     TOKEN_ELSE,
     TOKEN_NEQ,
     TOKEN_EQEQ,
+    TOKEN_ANDAND,
     TOKEN_WHILE,
     TOKEN_FOR,
     TOKEN_GT,
