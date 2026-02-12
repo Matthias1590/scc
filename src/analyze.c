@@ -1572,9 +1572,18 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		} break;
 		case NODE_BREAK: {
 			qbe_label_t break_label = list_at(&ctx->loop_stack, loop_t, ctx->loop_stack.length - 1)->break_label;
-
+			
 			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
 			fprintf(ctx->out_file, "    jmp @label_%zu\n", break_label.label_num);
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			ctx->result_var = ctx_null_var;
+			ctx->result_type = void_type;
+		} break;
+		case NODE_CONTINUE: {
+			qbe_label_t continue_label = list_at(&ctx->loop_stack, loop_t, ctx->loop_stack.length - 1)->continue_label;
+			
+			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", continue_label.label_num);
 			fprintf(ctx->out_file, "@unused_%zu\n", ctx->next_label++);  // TODO: This is a hack because every block can only end with 1 jump, we add a label to jumps to ensure there's only 1 jump per block.
 			ctx->result_var = ctx_null_var;
 			ctx->result_type = void_type;

@@ -39,6 +39,7 @@ typedef enum {
     TOKEN_RBRACK,
     TOKEN_INC,
     TOKEN_BREAK,
+    TOKEN_CONTINUE,
 } token_type_t;
 
 typedef struct {
