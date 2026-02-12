@@ -1663,6 +1663,51 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			ctx->result_var = ctx_null_var;
 			ctx->result_type = void_type;
 		} break;
+		case NODE_FOR: {
+			qbe_label_t cond_label = ctx_new_label(ctx);
+			qbe_label_t start_label = ctx_new_label(ctx);
+			qbe_label_t end_label = ctx_new_label(ctx);
+			qbe_label_t update_label = ctx_new_label(ctx);
+
+			// Update label falls through to condition check, on first enter we go straight to condition, after that, any continues will go to update
+			loop_t loop = {
+				.continue_label = update_label,
+				.break_label = end_label,
+			};
+			list_push(&ctx->loop_stack, &loop);
+
+			push_map(symbol_maps);
+
+			if (!analyze_node(ctx, symbol_maps, node->as.for_.init_stmt_ref, false, scope_depth + 1)) {
+				return false;
+			}
+
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", cond_label.label_num);
+
+			fprintf(ctx->out_file, "@label_%zu\n", update_label.label_num);
+			if (!analyze_node(ctx, symbol_maps, node->as.for_.update_expr_ref, false, scope_depth + 1)) {
+				return false;
+			}
+
+			fprintf(ctx->out_file, "@label_%zu\n", cond_label.label_num);
+			// TODO: Ensure cond_expr_ref evaluates to an int/bool or whatever, at least not void or something
+			if (!analyze_node(ctx, symbol_maps, node->as.for_.cond_expr_ref, false, scope_depth + 1)) {
+				return false;
+			}
+			fprintf(ctx->out_file, "    jnz ");
+			qbe_write_var(ctx, ctx->result_var);
+			fprintf(ctx->out_file, ", @label_%zu, @label_%zu\n", start_label.label_num, end_label.label_num);
+			fprintf(ctx->out_file, "@label_%zu\n", start_label.label_num);
+			if (!analyze_node(ctx, symbol_maps, node->as.for_.body_ref, false, scope_depth + 1)) {
+				return false;
+			}
+			fprintf(ctx->out_file, "    jmp @label_%zu\n", update_label.label_num);
+			fprintf(ctx->out_file, "@label_%zu\n", end_label.label_num);
+
+			list_pop(&ctx->loop_stack);
+
+			pop_map(symbol_maps);
+		} break;
 		default:
 			todo("Unhandled node type in analyze_node");
 	}

@@ -37,6 +37,7 @@ typedef enum {
     NODE_PLUSEQ,
     NODE_DISCARD,
     NODE_WHILE,
+    NODE_FOR,
     NODE_NEGATE,
     NODE_INDEX,
     NODE_POSTINC,
@@ -131,6 +132,12 @@ struct node_t {
         struct {
             node_ref_t expr_ref;
         } postinc;
+        struct {
+            node_ref_t init_stmt_ref;
+            node_ref_t cond_expr_ref;
+            node_ref_t update_expr_ref;
+            node_ref_t body_ref;
+        } for_;
     } as;
 };
 

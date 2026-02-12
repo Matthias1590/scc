@@ -30,6 +30,7 @@ typedef enum {
     TOKEN_NEQ,
     TOKEN_EQEQ,
     TOKEN_WHILE,
+    TOKEN_FOR,
     TOKEN_GT,
     TOKEN_LT,
     TOKEN_LTE,
