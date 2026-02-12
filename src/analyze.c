@@ -564,7 +564,7 @@ static void add_symbol(list_t *symbol_maps, symbol_t symbol) {
 
 	symbol_t *existing_symbol = find_symbol(*current_map, sv_from_cstr(symbol.name->as.identifier));
 	if (existing_symbol != NULL && existing_symbol->scope_depth >= symbol.scope_depth) {
-		todo("Report redeclaration error");
+		report_error(symbol.name->source_loc, "Redefinition of '%s'", symbol.name->as.identifier);
 	}
 
 	list_push(current_map, &symbol);

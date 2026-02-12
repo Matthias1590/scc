@@ -17,41 +17,41 @@
     do { \
         if (!(expr)) { \
             fprintf(stderr, "Assertion failed: %s (%s:%d)\n", #expr, __FILE__, __LINE__); \
-            abort(); \
+            exit(1); \
         } \
     } while (0)
 
 #define todo(msg) \
     do { \
         fprintf(stderr, "TODO: %s (%s:%d)\n", msg, __FILE__, __LINE__); \
-        abort(); \
+        exit(1); \
     } while (0)
 
 #define unreachable() \
     do { \
         fprintf(stderr, "Unreachable code reached (%s:%d)\n", __FILE__, __LINE__); \
-        abort(); \
+        exit(1); \
     } while (0)
 
 // TODO: DEPRECATE
 #define report_error(source_loc, msg, ...) \
     do { \
-        fprintf(stderr, "%s:%zu:%zu: " msg "\n", \
+        fprintf(stderr, "ERROR: %s:%zu:%zu: " msg "\n", \
                 source_loc.file_name, source_loc.line, source_loc.column, ##__VA_ARGS__); \
-        abort(); \
+        exit(1); \
     } while (0)
 
 #define report_start(source_loc, msg, ...) \
-    fprintf(stderr, "%s:%zu:%zu: " msg, \
+    fprintf(stderr, "ERROR: %s:%zu:%zu: " msg, \
             source_loc.file_name, source_loc.line, source_loc.column, ##__VA_ARGS__)
 
 #define report_line(msg, ...) \
-    fprintf(stderr, "    " msg, ##__VA_ARGS__)
+    fprintf(stderr, "        " msg, ##__VA_ARGS__)
 
 #define report_end() \
     do { \
         fflush(stderr); \
-        abort(); \
+        exit(1); \
     } while (0)
 
 #define debug_var(type, name, value) type name = value; \

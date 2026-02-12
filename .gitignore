@@ -1,8 +1,10 @@
 .vscode/
 bin/
-run.out
 scc
+compile.error
+run.out
 *.o
 *.elf
 *.s
 *.qbe
+__pycache__/
