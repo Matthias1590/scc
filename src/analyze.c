@@ -724,17 +724,27 @@ static size_t num_required_args(type_t func_type) {
 	return func_type.as.func.parameter_types.length;
 }
 
-static bool implicit_cast(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
+static bool decay_array(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
 	(void)ctx;
 
 	// Array -> pointer
 	if (var_type->kind == TYPE_ARRAY && to_type.kind == TYPE_PTR) {
+		// TODO: Is the sentence below correct? int[][] is allowed to decay into int** no?
 		// Only allowed if they inner types are the same
 		if (!type_eq(type_deref(*var_type), type_deref(to_type))) {
 			return false;
 		}
 		var->value_type = qbe_type_from_type(to_type);
 		*var_type = to_type;
+		return true;
+	}
+
+	return false;
+}
+
+static bool implicit_cast(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
+	// Array decay
+	if (decay_array(ctx, var, var_type, to_type)) {
 		return true;
 	}
 

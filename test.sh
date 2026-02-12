@@ -24,6 +24,7 @@ for file in tests/*.c; do
             echo -e "\033[31m[!] Test produced unexpected output for $file\033[0m"
             continue
         fi
+        rm run.out
     fi
 
     echo -e "\033[32m[+] Test passed for $file\033[0m"
