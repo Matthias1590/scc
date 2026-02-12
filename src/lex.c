@@ -303,6 +303,19 @@ static bool try_consume_symbol(lex_ctx_t *ctx) {
             // TODO: Unary NOT token
             return false;
         }
+    } else if (ctx->code_view->string[0] == '.') {
+        if (ctx->code_view->length >= 2 && ctx->code_view->string[1] == '.') {
+            if (ctx->code_view->length >= 3 && ctx->code_view->string[2] == '.') {
+                token.type = TOKEN_DOTS;
+                sv_consume(ctx->code_view, 2);  // consume extra '..'
+            } else {
+                // TODO: ".." should be parse error?
+                return false;
+            }
+        } else {
+            // TODO: Struct/union member access
+            return false;
+        }
     } else {
         return false;
     }

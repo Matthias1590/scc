@@ -40,6 +40,7 @@ typedef enum {
     TOKEN_INC,
     TOKEN_BREAK,
     TOKEN_CONTINUE,
+    TOKEN_DOTS,
 } token_type_t;
 
 typedef struct {

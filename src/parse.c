@@ -1344,6 +1344,18 @@ static bool try_consume_block(parse_ctx_t *ctx) {
 static bool try_consume_param(parse_ctx_t *ctx) {
     parse_ctx_t new_ctx = *ctx;
 
+    token_t *dots_token;
+    if (try_consume_token(&new_ctx, TOKEN_DOTS, &dots_token)) {
+        node_t vararg_node = {
+            .type = NODE_VAR_DECL,
+            .source_loc = dots_token->source_loc,
+            .as.var_decl.is_varargs = true,
+        };
+        ctx_update(ctx, &new_ctx, &vararg_node);
+
+        return true;
+    }
+
     if (!try_consume_type(&new_ctx)) {
         return false;
     }
@@ -1416,6 +1428,17 @@ bool try_consume_function_signature(parse_ctx_t *ctx) {
         }
         if (trailing_comma) {
             return false;
+        }
+    }
+
+    // Ensure varargs is at end if it exists
+    for (size_t i = 0; i < parameters.length; i++) {
+        node_ref_t *param_ref = list_at(&parameters, node_ref_t, i);
+        node_t *param = node_ref_get(*param_ref);
+        assert(param->type == NODE_VAR_DECL);
+
+        if (param->as.var_decl.is_varargs && i != parameters.length - 1) {
+            report_error(param->source_loc, "Varargs can only come after the last parameter");
         }
     }
 

@@ -15,9 +15,6 @@ for file in tests/*.c; do
     if [ $code -ne 0 ]; then
         echo -e "\033[31m[!] Test exited abnormally for $file\033[0m"
         continue
-    else
-        echo -e "\033[32m[+] Test passed for $file\033[0m"
-        continue
     fi
 
     out="${file%.c}.out"
@@ -28,4 +25,6 @@ for file in tests/*.c; do
             continue
         fi
     fi
+
+    echo -e "\033[32m[+] Test passed for $file\033[0m"
 done

@@ -97,6 +97,9 @@ static type_t type_deref(type_t pointer_type) {
 
 static void type_print(type_t type) {
 	switch (type.kind) {
+	case TYPE_VARARGS:
+		fprintf(stderr, "...");
+		break;
 	case TYPE_INT:
 		fprintf(stderr, "int");
 		break;
@@ -181,7 +184,12 @@ static type_t type_from_node(node_t *node) {
 		for (size_t i = 0; i < node->as.function_signature.parameters.length; i++) {
 			node_ref_t *param_ref = list_at(&node->as.function_signature.parameters, node_ref_t, i);
 			node_t *param_node = node_ref_get(*param_ref);
-			type_t param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+			type_t param_type;
+			if (param_node->as.var_decl.is_varargs) {
+				param_type.kind = TYPE_VARARGS;
+			} else {
+				param_type = type_from_node(node_ref_get(param_node->as.var_decl.type_ref));
+			}
 			list_push(&parameter_types, &param_type);
 		}
 		type_t function_type = {
@@ -453,6 +461,7 @@ static void qbe_write_ext_instr(codegen_ctx_t *ctx, type_t type) {
 	assert(qbe_type_size(qbe_type_from_type(type)) != 8 && "Cannot extend further than long");
 
 	switch (type.kind) {
+		case TYPE_VARARGS:
 		case TYPE_VOID:
 		case TYPE_FUNC:
 		case TYPE_LONG:
@@ -678,6 +687,16 @@ static bool promote_vars(codegen_ctx_t *ctx, qbe_var_t *left_var, type_t *left_t
 	}
 
 	return true;
+}
+
+static size_t num_required_args(type_t func_type) {
+	for (size_t i = 0; i < func_type.as.func.parameter_types.length; i++) {
+		type_t *type = list_at(&func_type.as.func.parameter_types, type_t, i);
+		if (type->kind == TYPE_VARARGS) {
+			return i;
+		}
+	}
+	return func_type.as.func.parameter_types.length;
 }
 
 // TODO: Refactor so this takes a pointer to qbe_var_t and type_t and modifies them in place instead of through ctx
@@ -1199,14 +1218,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 		case NODE_CALL: {
 			// Analyze arguments
 			list_t arg_vars = { .element_size = sizeof(qbe_var_t) };
-			list_t arg_types = { .element_size = sizeof(type_t) };
+			list_t provided_arg_types = { .element_size = sizeof(type_t) };
 			for (size_t i = 0; i < node->as.call.arg_refs.length; i++) {
 				node_ref_t *arg_ref = list_at(&node->as.call.arg_refs, node_ref_t, i);
 				if (!analyze_node(ctx, symbol_maps, *arg_ref, false, scope_depth)) {
 					return false;
 				}
 				list_push(&arg_vars, &ctx->result_var);
-				list_push(&arg_types, &ctx->result_type);
+				list_push(&provided_arg_types, &ctx->result_type);
 			}
 
 			if (!analyze_node(ctx, symbol_maps, node->as.call.function_ref, true, scope_depth)) {
@@ -1222,14 +1241,14 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			type_t return_type = *function_type.as.func.return_type;
 
 			// Check argument types
-			if (function_type.as.func.parameter_types.length != arg_types.length) {
-				todo("Report function argument count mismatch error");
+			if (provided_arg_types.length < num_required_args(function_type)) {
+				report_error(node->source_loc, "Function required at least %zu arguments but only %zu were provided", num_required_args(function_type), provided_arg_types.length);
 			}
-			for (size_t i = 0; i < arg_types.length; i++) {
+			for (size_t i = 0; i < num_required_args(function_type); i++) {
 				type_t *expected_type = list_at(&function_type.as.func.parameter_types, type_t, i);
-				type_t *actual_type = list_at(&arg_types, type_t, i);
+				type_t *actual_type = list_at(&provided_arg_types, type_t, i);
 				if (!type_eq(*expected_type, *actual_type)) {
-					report_error(node->source_loc, "Function argument type mismatch");
+					report_error(node->source_loc, "Function argument type mismatch for argument at index %zu", i);
 				}
 			}
 

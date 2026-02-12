@@ -3,6 +3,7 @@
 #include "scc.h"
 
 typedef enum {
+	TYPE_VARARGS,
 	TYPE_INT,
 	TYPE_UNSIGNED_INT,
 	TYPE_LONG,
