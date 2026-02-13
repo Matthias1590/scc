@@ -1,56 +1,13 @@
-Lexing:
-[*] Integers
-[*] Operators (+, -, *, /)
-[*] Parentheses
-[*] Int keyword
-[*] Identifiers
-[*] Semicolons
-[*] Float keyword
-[*] Assignment operator (=)
-[*] Return keyword
-[*] Braces ({, })
-[*] Strings
+Needed:
+- Reporting furthest error in parsing
+- Structs
+- Typedefs
 
-Parsing:
-[*] Addition
-[*] Subtraction
-[*] Multiplication
-[*] Division
-[*] Parentheses handling
-[*] Operator precedence
-[*] Variable declaration (no assignment)
-[*] Blocks
-[*] Primitive types (int, float)
-[*] Variable declaration with assignment
-[*] Variable assignment
-[*] Variables as expressions
-[-] Function declaration
-[*] Return statement
-[*] Casting
-[-] Function call
-[*] Pointer types
+Unhappy with:
+- Make not rebuilding on header file changes
+- No preprocessor
+- Messy code generation
+- Implicit casting, value promotions, etc. too scattered throughout the codebase currently.
 
-Refactor:
-[*] Split up into modules
-[*] Extract common code in parser into functions
-
-Analysis:
-[*] Declarations
-[-] Type checking
-[*] Return checking
-
-Codegen:
-[*] Functions
-
----
-
-[*] If statements
-[*] Forward declaration
-[*] While loops
-[-] Implicit casting
-[-] Int promotion and all that
-This is to get a hello world working.
-
-[ ] Operator precedence
-[ ] Preprocess manually (OR, fix source locations for now)
-[ ] Fix makefile to rebuild when a header file changes
+Notes:
+- Have some set_error function which keeps track of the furthest parser error, if provided error is at the same depth as the currently set error, replace it, the new error is to clarify.
