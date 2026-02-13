@@ -9,5 +9,8 @@ Unhappy with:
 - Messy code generation
 - Implicit casting, value promotions, etc. too scattered throughout the codebase currently.
 
+After C99 compliance:
+- Swap out qbe with my own backend
+
 Notes:
 - Have some set_error function which keeps track of the furthest parser error, if provided error is at the same depth as the currently set error, replace it, the new error is to clarify.
