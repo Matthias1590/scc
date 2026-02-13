@@ -3,12 +3,16 @@ Needed:
 - Reporting furthest error in parsing
 - Structs
 - Typedefs
+- Parsing arguments
 
 Unhappy with:
 - Make not rebuilding on header file changes
 - No preprocessor
 - Messy code generation
 - Implicit casting, value promotions, etc. too scattered throughout the codebase currently.
+
+Nice to have:
+- Warnings
 
 After C99 compliance:
 - Swap out qbe with my own backend
