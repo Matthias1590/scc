@@ -12,7 +12,7 @@ scc: $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@
 
 test:
- ./test_all.py
+	./test_all.py
 
 bin/%.o: src/%.c
 	@mkdir -p bin
