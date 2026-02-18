@@ -3,7 +3,7 @@
 char *preprocess_file(const char *in_path) {
     // Run `cpp -x c {PATH} | grep -v "^#"`
     char command[512];
-    snprintf(command, sizeof(command), "cpp -x c \"%s\" | grep -v \"^#\"", in_path);
+    snprintf(command, sizeof(command), "cpp -I./std -nostdinc -x c \"%s\" | grep -v \"^#\"", in_path);
 
     FILE *pipe = popen(command, "r");
     if (pipe == NULL) {
@@ -13,6 +13,7 @@ char *preprocess_file(const char *in_path) {
     char *buf = NULL;
     size_t len = 0;
     FILE *mem = open_memstream(&buf, &len);
+    assert(mem != NULL);
 
     char tmp[4096];
     while (fgets(tmp, sizeof tmp, pipe))
@@ -65,7 +66,8 @@ int main(int argc, char **argv) {
     list_t nodes = { .element_size = sizeof(node_t) };
     node_ref_t root_ref;
     if (!parse(&nodes, &tokens, &root_ref)) {
-        todo("Handle parse error");
+        fprintf(stderr, "Parse error\n");
+        return 1;
     }
 
     // assert(nodes.length > 0);
@@ -73,7 +75,8 @@ int main(int argc, char **argv) {
     // printf("\n");
 
     if (!analyze(root_ref, out_path)) {
-        todo("Handle analysis error");
+        fprintf(stderr, "Analyze error\n");
+        return 1;
     }
 
     list_clear(&nodes);

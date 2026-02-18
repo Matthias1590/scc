@@ -11,7 +11,7 @@ all: scc
 scc: $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@
 
-test:
+test: scc
 	./test_all.py
 
 bin/%.o: src/%.c

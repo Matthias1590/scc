@@ -478,13 +478,13 @@ static void qbe_write_store_instr(codegen_ctx_t *ctx, qbe_value_type_t value_typ
 	}
 }
 
-static void qbe_write_ext_instr(codegen_ctx_t *ctx, type_t type) {
+static void qbe_write_ext_instr(codegen_ctx_t *ctx, type_t from_type) {
 	fprintf(ctx->out_file, "ext");
 
-	assert(type_is_primitive(type) && "Can only extend primitive types");
-	assert(qbe_type_size(qbe_type_from_type(type)) != 8 && "Cannot extend further than long");
+	assert(type_is_primitive(from_type) && "Can only extend primitive types");
+	assert(qbe_type_size(qbe_type_from_type(from_type)) != 8 && "Cannot extend further than long");
 
-	switch (type.kind) {
+	switch (from_type.kind) {
 		case TYPE_VARARGS:
 		case TYPE_VOID:
 		case TYPE_FUNC:
@@ -607,13 +607,45 @@ static bool type_eq(type_t a, type_t b) {
 	return true;
 }
 
+static qbe_value_type_t qbe_flip_signedness(qbe_value_type_t type) {
+	switch (type) {
+		case QBE_VALUE_WORD:
+			return QBE_VALUE_UNSIGNED_WORD;
+		case QBE_VALUE_UNSIGNED_WORD:
+			return QBE_VALUE_WORD;
+		case QBE_VALUE_SIGNED_BYTE:
+			return QBE_VALUE_UNSIGNED_BYTE;
+		case QBE_VALUE_UNSIGNED_BYTE:
+			return QBE_VALUE_SIGNED_BYTE;
+		case QBE_VALUE_LONG:
+			return QBE_VALUE_UNSIGNED_LONG;
+		case QBE_VALUE_UNSIGNED_LONG:
+			return QBE_VALUE_LONG;
+		default:
+			return type;
+	}
+}
+
+static bool qbe_needs_cast_instruction(qbe_value_type_t from, qbe_value_type_t to) {
+	if (from == to) {
+		return false;
+	}
+
+	// If types only differ in signedness, no instruction is needed
+	if (qbe_flip_signedness(from) == to) {
+		return false;
+	}
+
+	return true;
+}
+
 static bool promote_value(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
 	assert(type_is_primitive(*var_type) && type_is_primitive(to_type));
 
 	qbe_value_type_t from_qbe_type = qbe_basetype_from_type(*var_type);
 	qbe_value_type_t to_qbe_type = qbe_basetype_from_type(to_type);
 
-	if (from_qbe_type == to_qbe_type) {
+	if (!qbe_needs_cast_instruction(from_qbe_type, to_qbe_type)) {
 		// No instructions needed to promote
 		*var_type = to_type;
 		return true;
@@ -656,12 +688,12 @@ static bool mult_by_ptr_size(codegen_ctx_t *ctx, qbe_var_t *var, type_t ptr_type
 	return true;
 }
 
-// Promote right operand so it can be added to a pointer of type left_type
+// Promote right operand to pointer size so it can be added to a pointer of type left_type
 static bool promote_pointer(codegen_ctx_t *ctx, type_t left_type, qbe_var_t *right_var, type_t *right_type) {
 	assert(left_type.kind == TYPE_PTR);
 
-	// Promote right to int
-	if (!promote_value(ctx, right_var, right_type, int_type)) {
+	// Promote right to pointer size
+	if (!promote_value(ctx, right_var, right_type, unsigned_long_type)) {
 		return false;
 	}
 
@@ -742,6 +774,39 @@ static bool decay_array(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, ty
 	return false;
 }
 
+static bool demote_value(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
+	(void)ctx;
+	(void)var;
+
+	assert(type_is_primitive(*var_type) && type_is_primitive(to_type));
+
+	qbe_value_type_t from_qbe_type = qbe_basetype_from_type(*var_type);
+	qbe_value_type_t to_qbe_type = qbe_basetype_from_type(to_type);
+
+	if (!qbe_needs_cast_instruction(from_qbe_type, to_qbe_type)) {
+		// No instructions needed to demote
+		*var_type = to_type;
+		return true;
+	}
+
+	// LEFTOFF: Implement
+	unreachable();
+
+	// // Truncate value
+	// qbe_var_t result_var = ctx_new_temp(ctx, qbe_type_from_type(to_type));
+	// fprintf(ctx->out_file, "    ");
+	// qbe_write_var(ctx, result_var);
+	// fprintf(ctx->out_file, " =");
+	// qbe_write_type(ctx, to_qbe_type);
+	// fprintf(ctx->out_file, " trunc ");
+	// qbe_write_var(ctx, *var);
+	// fprintf(ctx->out_file, "\n");
+
+	// *var = result_var;
+	// *var_type = to_type;
+	// return true;
+}
+
 static bool implicit_cast(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, type_t to_type) {
 	// Array decay
 	if (decay_array(ctx, var, var_type, to_type)) {
@@ -750,6 +815,11 @@ static bool implicit_cast(codegen_ctx_t *ctx, qbe_var_t *var, type_t *var_type, 
 
 	// Promotion
 	if (promote_value(ctx, var, var_type, to_type)) {
+		return true;
+	}
+
+	// Demotion
+	if (demote_value(ctx, var, var_type, to_type)) {
 		return true;
 	}
 
@@ -833,13 +903,13 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			fprintf(ctx->out_file, "    ");
 			qbe_write_var(ctx, var);
 
+			fprintf(ctx->out_file, " =l alloc4 ");
 			if (type.kind == TYPE_ARRAY) {
-				fprintf(ctx->out_file, " =l alloc4 ");
 				qbe_write_var(ctx, array_size_var);
-				fprintf(ctx->out_file, "\n");
 			} else {
-				fprintf(ctx->out_file, " =l alloc4 %zu\n", type_size(type));
+				fprintf(ctx->out_file, "%zu", type_size(type));
 			}
+			fprintf(ctx->out_file, "\n");
 
 			if (!node_ref_is_null(node->as.var_decl.init_expr_ref)) {
 				// TODO: Analyze init expression type compatibility
@@ -847,6 +917,12 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 				if (!analyze_node(ctx, symbol_maps, node->as.var_decl.init_expr_ref, false, scope_depth)) {
 					return false;
 				}
+
+				// Promote/cast if needed
+				if (!implicit_cast(ctx, &ctx->result_var, &ctx->result_type, type)) {
+					return false;
+				}
+
 				fprintf(ctx->out_file, "    ");
 				qbe_write_store_instr(ctx, qbe_type_from_type(type));
 				qbe_write_var(ctx, ctx->result_var);
@@ -1578,7 +1654,7 @@ bool analyze_node(codegen_ctx_t *ctx, list_t *symbol_maps, node_ref_t node_ref, 
 			}
 
 			// Add and then deref if not lvalue
-			if (!promote_value(ctx, &index_var, &index_type, long_type)) {
+			if (!promote_value(ctx, &index_var, &index_type, unsigned_long_type)) {
 				return false;
 			}
 

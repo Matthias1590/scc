@@ -46,7 +46,7 @@ def test_source(src: str, compiler_output_path: str, rm) -> str | None:
     exit_code, compiler_output = compile(src, "out.elf", rm)
     expected_compile_code = 1 if os.path.exists(compiler_output_path) else 0
     if exit_code != expected_compile_code:
-        return f"Expected compile exit code {expected_compile_code}, got {exit_code}"
+        return f"Compilation failed unexpectedly with exit code {exit_code} (expected {expected_compile_code}):\n{compiler_output.rstrip()}"
     if os.path.exists(compiler_output_path):
         diff_error = diff(read_file(compiler_output_path), compiler_output)
         if diff_error is not None:
