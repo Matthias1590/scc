@@ -1,4 +1,6 @@
-#define size_t unsigned long
+#pragma once
 
-void *malloc(size_t size);
-void free(void *ptr);
+#include <stddef.h>
+
+void *malloc(size_t __size);
+void free(void *__ptr);
